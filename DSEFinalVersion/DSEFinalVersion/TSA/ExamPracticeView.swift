@@ -8,6 +8,45 @@
 
 import SwiftUI
 import UIKit
+extension Color {
+    static let brandPrimary = Color(hex: "63BEF3")
+     static let brandSecondary = Color(hex: "FFCC41")
+     static let brandAccent = Color(hex: "5C43A9")
+     static let brandBackground = Color("systemBackgroundColor")
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 3: // RGB (12-bit)
+            (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
+        case 6: // RGB (24-bit)
+            (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: // ARGB (32-bit)
+            (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default:
+            (a, r, g, b) = (1, 1, 1, 0)
+        }
+        self.init(
+            .sRGB,
+            red: Double(r) / 255,
+            green: Double(g) / 255,
+            blue:  Double(b) / 255,
+            opacity: Double(a) / 255
+        )
+    }
+}
+//
+//  ExamPracticeView.swift
+//  fyp
+//
+//  Created by Matt on 2026/4/8.
+//  Copyright © 2026 Riseverse tech limited. All rights reserved.
+//
+
+import SwiftUI
+import UIKit
 
 // 考试类型结构体
 struct ExamType: Identifiable {
@@ -249,7 +288,7 @@ struct ExamPracticeView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(ExamCategory.allCases, id: \.self) { category in
-                    CategoryButton(
+                    CategoryButton1(
                         category: category,
                         isSelected: selectedCategory == category,
                         action: {
@@ -296,7 +335,7 @@ struct ExamPracticeView: View {
 }
 
 // MARK: - 分类按钮
-struct CategoryButton: View {
+struct CategoryButton1: View {
     let category: ExamCategory
     let isSelected: Bool
     let action: () -> Void

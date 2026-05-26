@@ -1,7 +1,7 @@
 import Foundation
 
-final class ReportService {
-    static let shared = ReportService()
+final class ReportService1{
+    static let shared = ReportService1()
     
     typealias PromptPair = (system: String, user: String)
     

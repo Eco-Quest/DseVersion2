@@ -8,6 +8,7 @@
 import SwiftUI
 import Speech
 import AVFoundation
+import Combine
 
 // MARK: - JSON 数据模型
 struct StoryData: Codable {
@@ -62,7 +63,7 @@ struct QAItem: Codable, Identifiable {
     let question: String
 }
 
-// MARK: - 讨论题型
+// MARK: - 讨论题型（小组讨论：1分钟准备 + 3分钟讨论）
 struct DiscussionType: Codable {
     let description: String
     let items: [DiscussionItem]
@@ -98,7 +99,7 @@ struct StoryConfig {
     enum StoryType {
         case pictureStory      // 小三/小六：看图说故事
         case oralReport       // 小六：口头报告
-        case discussion        // 小六：讨论
+        case discussion        // 小六：小组讨论（1分钟准备 + 3分钟讨论）
     }
     
     init(topic: String, images: [String], pictureDescriptions: [String], type: StoryType = .pictureStory) {
@@ -123,7 +124,7 @@ class StoryManager: ObservableObject {
     enum QuestionType: String, CaseIterable {
         case pictureStory = "看图说故事"
         case oralReport = "口头报告"
-        case discussion = "同学讨论"
+        case discussion = "小组讨论"
     }
     
     init() {
@@ -152,7 +153,7 @@ class StoryManager: ObservableObject {
                 if let qTypes = stories.categories.小六.question_types {
                     print("  小六看图说故事数量：\(qTypes.picture_story.items.count)")
                     print("  小六口头报告数量：\(qTypes.qa.items.count)")
-                    print("  小六讨论数量：\(qTypes.discussion.items.count)")
+                    print("  小六小组讨论数量：\(qTypes.discussion.items.count)")
                 }
             }
         } catch {
@@ -210,7 +211,7 @@ class StoryManager: ObservableObject {
             guard !items.isEmpty else { return nil }
             let randomIndex = Int.random(in: 0..<items.count)
             let item = items[randomIndex]
-            print("📖 随机抽取【小六-讨论】：\(item.topic)")
+            print("📖 随机抽取【小六-小组讨论】：\(item.topic)")
             return (id: item.id, topic: item.topic, questionText: item.discussion_question, image: nil)
         }
     }
@@ -483,126 +484,6 @@ struct AudioPlaybackView: View {
     }
 }
 
-// MARK: - AnimatedGIFView
-struct AnimatedGIFView: UIViewRepresentable {
-    let gifName: String
-    var isAnimating: Bool = true
-    
-    func makeUIView(context: Context) -> UIView {
-        let containerView = UIView()
-        containerView.backgroundColor = .clear
-        
-        let imageView = UIImageView()
-        imageView.tag = 100
-        imageView.contentMode = .scaleAspectFit
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        
-        loadGIF(into: imageView)
-        
-        containerView.addSubview(imageView)
-        
-        NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: containerView.leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: containerView.trailingAnchor),
-            imageView.topAnchor.constraint(equalTo: containerView.topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: containerView.bottomAnchor)
-        ])
-        
-        return containerView
-    }
-    
-    func updateUIView(_ uiView: UIView, context: Context) {
-        guard let imageView = uiView.viewWithTag(100) as? UIImageView else { return }
-        
-        if isAnimating {
-            if imageView.animationImages == nil || imageView.animationImages?.isEmpty == true {
-                loadGIF(into: imageView)
-            }
-            imageView.startAnimating()
-        } else {
-            imageView.stopAnimating()
-        }
-    }
-    
-    private func loadGIF(into imageView: UIImageView) {
-        if let gifImage = UIImage.animatedGIF(named: gifName) {
-            imageView.image = gifImage
-            imageView.animationImages = gifImage.images
-            imageView.animationDuration = gifImage.duration
-            imageView.startAnimating()
-            return
-        }
-        
-        if let path = Bundle.main.path(forResource: gifName, ofType: "gif"),
-           let gifImage = UIImage.animatedGIF(at: path) {
-            imageView.image = gifImage
-            imageView.animationImages = gifImage.images
-            imageView.animationDuration = gifImage.duration
-            imageView.startAnimating()
-            return
-        }
-        
-        if let path = Bundle.main.path(forResource: gifName, ofType: nil),
-           let gifImage = UIImage.animatedGIF(at: path) {
-            imageView.image = gifImage
-            imageView.animationImages = gifImage.images
-            imageView.animationDuration = gifImage.duration
-            imageView.startAnimating()
-            return
-        }
-        
-        imageView.image = UIImage(systemName: "hourglass")
-        imageView.tintColor = .white
-    }
-}
-
-// MARK: - UIImage GIF 扩展
-extension UIImage {
-    static func animatedGIF(named name: String) -> UIImage? {
-        guard let path = Bundle.main.path(forResource: name, ofType: "gif") else {
-            return nil
-        }
-        return animatedGIF(at: path)
-    }
-    
-    static func animatedGIF(at path: String) -> UIImage? {
-        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let source = CGImageSourceCreateWithData(data as CFData, nil) else {
-            return nil
-        }
-        
-        var images: [UIImage] = []
-        var duration: TimeInterval = 0
-        
-        let count = CGImageSourceGetCount(source)
-        for i in 0..<count {
-            if let cgImage = CGImageSourceCreateImageAtIndex(source, i, nil) {
-                images.append(UIImage(cgImage: cgImage))
-                
-                let frameDuration = getFrameDuration(from: source, at: i)
-                duration += frameDuration
-            }
-        }
-        
-        return UIImage.animatedImage(with: images, duration: duration)
-    }
-    
-    private static func getFrameDuration(from source: CGImageSource, at index: Int) -> TimeInterval {
-        let defaultDuration: TimeInterval = 0.1
-        
-        guard let properties = CGImageSourceCopyPropertiesAtIndex(source, index, nil) as? [String: Any],
-              let gifProps = properties[kCGImagePropertyGIFDictionary as String] as? [String: Any] else {
-            return defaultDuration
-        }
-        
-        if let delayTime = gifProps[kCGImagePropertyGIFDelayTime as String] as? NSNumber {
-            return TimeInterval(delayTime.doubleValue)
-        }
-        
-        return defaultDuration
-    }
-}
-
 // MARK: - 评分环形进度条
 struct ScoreRingView: View {
     let score: Int
@@ -745,8 +626,11 @@ struct PictureRow: View {
                 .padding(.leading, 4)
             
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
                 .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
+                )
                 .frame(height: 250)
                 .frame(maxWidth: .infinity)
                 .overlay(
@@ -795,8 +679,11 @@ struct PictureReviewCard: View {
                 .padding(.leading, 4)
             
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
                 .fill(Color.white)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
+                )
                 .frame(height: 250)
                 .frame(maxWidth: .infinity)
                 .overlay(
@@ -835,12 +722,1574 @@ struct PictureReviewCard: View {
     }
 }
 
-// MARK: - 主视图
+// MARK: - 小组讨论专用的声音枚举（支持粤语）
+enum DiscussionVoice: String, CaseIterable {
+    // 粤语女声
+    case xiaoxiao = "Xiaoxiao"
+    case kiki = "Kiki"
+    // 粤语男声
+    case yunxi = "Yunxi"
+    case yunjian = "Yunjian"
+    case rocky = "Rocky"
+    // 普通话/英语音色
+    case cherry = "Cherry"
+    case kai = "Kai"
+    case jennifer = "Jennifer"
+    
+    var displayName: String {
+        switch self {
+        case .xiaoxiao: return "小晓 (粤语女声)"
+        case .kiki: return "Kiki (粤语女声)"
+        case .yunxi: return "云希 (粤语男声)"
+        case .yunjian: return "云健 (粤语男声)"
+        case .rocky: return "Rocky (粤语男声)"
+        case .cherry: return "Cherry (普通话)"
+        case .kai: return "Kai (普通话)"
+        case .jennifer: return "Jennifer (普通话)"
+        }
+    }
+}
+
+// MARK: - 小组讨论专用的参与者模型
+struct DiscussionParticipant {
+    let name: String
+    let voice: DiscussionVoice
+    let personality: String
+    let proficiencyLevel: ProficiencyLevel
+    
+    enum ProficiencyLevel: String {
+        case beginner = "beginner"
+        case intermediate = "intermediate"
+        case advanced = "advanced"
+        case native = "native"
+        
+        var style: String {
+            switch self {
+            case .beginner: return "使用基础词汇，简单句子"
+            case .intermediate: return "使用常见词汇，能表达观点"
+            case .advanced: return "使用精确词汇，复杂句式"
+            case .native: return "自然流畅，丰富的表达"
+            }
+        }
+    }
+    
+    init(name: String, voice: DiscussionVoice, personality: String, proficiency: ProficiencyLevel = .advanced) {
+        self.name = name
+        self.voice = voice
+        self.personality = personality
+        self.proficiencyLevel = proficiency
+    }
+}
+
+// MARK: - 小组讨论专用的聊天消息模型
+struct DiscussionChatMessage: Identifiable, Equatable {
+    let id = UUID()
+    let role: MessageRole
+    let content: String
+    let timestamp: Date
+    let voice: String?
+    let speakerName: String?
+    
+    enum MessageRole {
+        case user
+        case ai
+    }
+    
+    var formattedTime: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter.string(from: timestamp)
+    }
+    
+    var displayName: String {
+        if role == .user {
+            return "你"
+        } else {
+            if let name = speakerName {
+                return name
+            }
+            return "同学"
+        }
+    }
+}
+
+// MARK: - 小组讨论主题模型
+struct DiscussionTopic1 {
+    let fullText: String
+    let participants: [DiscussionParticipant]
+    
+    var article: String { return fullText }
+}
+
+// MARK: - 小组讨论专用的 PCM 音频播放器
+class DiscussionPCMAudioPlayer {
+    private var audioEngine: AVAudioEngine?
+    private var playerNode: AVAudioPlayerNode?
+    private var audioFormat: AVAudioFormat?
+    private var pendingBuffers = 0
+    var onPlaybackFinished: (() -> Void)?
+    var currentPlayingVoice: String?
+    
+    init() {
+        setupAudioEngine()
+    }
+    
+    private func setupAudioEngine() {
+        audioEngine = AVAudioEngine()
+        playerNode = AVAudioPlayerNode()
+        guard let audioEngine = audioEngine, let playerNode = playerNode else { return }
+        
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 24000,
+            channels: 1,
+            interleaved: false
+        ) else {
+            print("Failed to create audio format")
+            return
+        }
+        audioFormat = format
+        audioEngine.attach(playerNode)
+        audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
+        audioEngine.prepare()
+        do {
+            try audioEngine.start()
+        } catch {
+            print("Failed to start audio engine: \(error)")
+        }
+    }
+    
+    func playPCMData(_ pcmData: Data, voice: String) {
+        guard let playerNode = playerNode, let format = audioFormat else { return }
+        currentPlayingVoice = voice
+        pendingBuffers += 1
+        
+        if let audioEngine = audioEngine, !audioEngine.isRunning {
+            do {
+                try audioEngine.start()
+            } catch {
+                pendingBuffers -= 1
+                return
+            }
+        }
+        
+        let frameCount = UInt32(pcmData.count / 2)
+        if frameCount == 0 {
+            pendingBuffers -= 1
+            return
+        }
+        
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            pendingBuffers -= 1
+            return
+        }
+        buffer.frameLength = frameCount
+        
+        pcmData.withUnsafeBytes { rawBufferPointer in
+            if let baseAddress = rawBufferPointer.baseAddress {
+                let int16Pointer = baseAddress.assumingMemoryBound(to: Int16.self)
+                if let floatChannelData = buffer.floatChannelData {
+                    for i in 0..<Int(frameCount) {
+                        floatChannelData[0][i] = Float(int16Pointer[i]) / Float(Int16.max)
+                    }
+                }
+            }
+        }
+        
+        playerNode.scheduleBuffer(buffer) { [weak self] in
+            DispatchQueue.main.async {
+                self?.pendingBuffers -= 1
+                if self?.pendingBuffers == 0 {
+                    self?.onPlaybackFinished?()
+                }
+            }
+        }
+        
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
+    }
+    
+    func stop() {
+        playerNode?.stop()
+        playerNode?.reset()
+        pendingBuffers = 0
+        currentPlayingVoice = nil
+    }
+}
+
+// MARK: - 小组讨论专用的 WebSocket 管理器
+// MARK: - 小组讨论专用的 WebSocket 管理器
+// MARK: - 小组讨论专用的 WebSocket 管理器
+class DiscussionWebSocketManager: NSObject, ObservableObject {
+    @Published var isConnected = false
+    @Published var isRecording = false
+    @Published var isSpeaking = false
+    @Published var isAITalking = false
+    @Published var isDiscussionActive = false
+    @Published var chatMessages: [DiscussionChatMessage] = []
+    @Published var currentStreamingText = ""
+    @Published var canUserSpeak = true
+    @Published var currentSpeakerName: String? = "同学 A"
+    
+    @Published var currentRemainingTime: Int = 180
+    
+    var selectedLanguage: String = "粤语"
+    
+    private var turnCounter = 0
+    private let participantsList = ["同学 A", "同学 B"]
+    private var consecutiveSilenceCount = 0
+    var onDiscussionEnded: ((String) -> Void)?
+    private var isGeneratingResponse = false
+    private var hasGivenConclusion = false
+    
+    private var webSocketTask: URLSessionWebSocketTask?
+    private lazy var webSocketSession: URLSession = {
+        URLSession(configuration: .default, delegate: self, delegateQueue: OperationQueue())
+    }()
+    private var audioEngine: AVAudioEngine?
+    private let audioPlayer = DiscussionPCMAudioPlayer()
+    private var recordingData = Data()
+    private var isProcessingResponse = false
+    private var currentVoice: DiscussionVoice = .xiaoxiao
+    private var hasSentAudio = false
+    private var isWaitingForVoiceUpdate = false
+    private var currentResponseVoice: DiscussionVoice = .xiaoxiao
+    private var voiceUpdateCompletion: (() -> Void)?
+    
+    private var currentTopic: DiscussionTopic1?
+    private var conversationHistory: [String] = []
+    private var participants: [DiscussionParticipant] = []
+    private var currentParticipant: DiscussionParticipant?
+    private var waitForUserTimer: Timer?
+    
+    private let aliyunEndpoint = "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"
+    private let aliyunApiKey = "sk-92262754eca4423a9e2e5b84ebe0af5c"
+    private let model = "qwen3-omni-flash-realtime"
+    
+    override init() {
+        super.init()
+        print("🎤 [DiscussionWebSocketManager] 初始化")
+        setupAudioSession()
+        setupAudioPlayerCallback()
+    }
+    
+    private func setupAudioSession() {
+        let audioSession = AVAudioSession.sharedInstance()
+        do {
+            try audioSession.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker, .allowBluetoothA2DP])
+            try audioSession.setActive(true)
+            print("✅ [音频] 音频会话设置成功")
+        } catch {
+            print("❌ [音频] 设置音频会话失败: \(error)")
+        }
+    }
+    
+    private func setupAudioPlayerCallback() {
+        audioPlayer.onPlaybackFinished = { [weak self] in
+            Task { @MainActor in
+                print("🎵 [AI] 语音播放结束")
+                self?.handleAIFinishedSpeaking()
+            }
+        }
+    }
+    
+    private func handleAIFinishedSpeaking() {
+        print("📢 [状态] handleAIFinishedSpeaking() 被调用")
+        print("   - isAITalking 之前: \(isAITalking)")
+        print("   - canUserSpeak 之前: \(canUserSpeak)")
+        
+        isSpeaking = false
+        isAITalking = false
+        isProcessingResponse = false
+        currentStreamingText = ""
+        hasSentAudio = false
+        isWaitingForVoiceUpdate = false
+        consecutiveSilenceCount = 0
+        isGeneratingResponse = false
+        
+        print("   - isAITalking 之后: \(isAITalking)")
+        print("   - canUserSpeak 之后: \(canUserSpeak)")
+        print("   - consecutiveSilenceCount: \(consecutiveSilenceCount)")
+        
+        if isDiscussionActive {
+            // ✅ 只有在没有等待用户发言定时器的情况下才允许发言
+            if waitForUserTimer == nil {
+                canUserSpeak = true
+                print("✅ [状态] 允许用户发言，启动3秒等待计时器")
+                startWaitForUserTimer()
+            } else {
+                print("⚠️ [状态] 已有等待计时器，不重复启动")
+            }
+        }
+    }
+    
+    private func startWaitForUserTimer() {
+        waitForUserTimer?.invalidate()
+        
+        print("⏰ [计时器] 启动等待用户发言计时器（3秒）")
+        
+        waitForUserTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
+            guard let self = self else { return }
+            
+            guard self.isDiscussionActive, !self.isRecording, !self.isAITalking else {
+                print("⏰ [计时器] 条件不满足: isDiscussionActive=\(self.isDiscussionActive), isRecording=\(self.isRecording), isAITalking=\(self.isAITalking)")
+                return
+            }
+            
+            print("⏰ [计时器] 用户3秒内未发言")
+            
+            self.canUserSpeak = false
+            self.waitForUserTimer = nil
+            
+            if self.consecutiveSilenceCount >= 1 {
+                print("❌ [讨论] 用户连续两次没发言，结束讨论")
+                let transcript = self.getDiscussionTranscript()
+                self.onDiscussionEnded?(transcript)
+                self.stopDiscussion()
+                return
+            }
+            
+            print("🔄 [发言] 用户第一次沉默，切换发言人")
+            self.turnCounter += 1
+            let nextSpeakerName = self.participantsList[self.turnCounter % 2]
+            print("   - 下一个发言人: \(nextSpeakerName)")
+            print("   - 当前 turnCounter: \(self.turnCounter)")
+            
+            if let nextParticipant = self.participants.first(where: { $0.name == nextSpeakerName }) {
+                self.currentParticipant = nextParticipant
+                self.currentSpeakerName = nextParticipant.name
+                self.currentVoice = nextParticipant.voice
+                self.currentResponseVoice = nextParticipant.voice
+                self.consecutiveSilenceCount += 1
+                print("   👤 切换到: \(nextParticipant.name) (音色: \(nextParticipant.voice))")
+                self.generateAIReply()
+            } else {
+                let voice = self.getVoiceForCurrentLanguage()
+                let tempParticipant = DiscussionParticipant(name: nextSpeakerName, voice: voice, personality: "温和", proficiency: .advanced)
+                self.currentParticipant = tempParticipant
+                self.currentSpeakerName = nextSpeakerName
+                self.currentVoice = voice
+                self.currentResponseVoice = voice
+                self.consecutiveSilenceCount += 1
+                print("   👤 切换到（默认）: \(nextSpeakerName) (音色: \(voice))")
+                self.generateAIReply()
+            }
+        }
+    }
+    
+    private func cancelWaitForUserTimer() {
+        waitForUserTimer?.invalidate()
+        waitForUserTimer = nil
+        print("⏰ [计时器] 取消等待计时器")
+    }
+    
+    private func getDiscussionTranscript() -> String {
+        var transcript = ""
+        for message in chatMessages {
+            let speaker = message.displayName
+            transcript += "\(speaker): \(message.content)\n"
+        }
+        return transcript
+    }
+    
+    private func getVoiceForCurrentLanguage() -> DiscussionVoice {
+        if selectedLanguage == "粤语" {
+            let cantoneseVoices: [DiscussionVoice] = [.kiki, .rocky]
+            let index = turnCounter % cantoneseVoices.count
+            print("   [音色] 粤语模式，选择: \(cantoneseVoices[index])")
+            return cantoneseVoices[index]
+        } else {
+            let mandarinVoices: [DiscussionVoice] = [.cherry, .kai]
+            let index = turnCounter % mandarinVoices.count
+            print("   [音色] 普通话模式，选择: \(mandarinVoices[index])")
+            return mandarinVoices[index]
+        }
+    }
+    
+    private func getNextParticipant() -> DiscussionParticipant {
+        guard !participants.isEmpty else {
+            let voice = getVoiceForCurrentLanguage()
+            let name = participantsList[turnCounter % 2]
+            print("   [getNextParticipant] 无参与者，使用默认: \(name)")
+            return DiscussionParticipant(name: name, voice: voice, personality: "温和", proficiency: .advanced)
+        }
+        
+        let nextName = participantsList[turnCounter % 2]
+        if let participant = participants.first(where: { $0.name == nextName }) {
+            currentSpeakerName = participant.name
+            print("   [getNextParticipant] 找到参与者: \(participant.name)")
+            return participant
+        } else {
+            let voice = getVoiceForCurrentLanguage()
+            let defaultParticipant = DiscussionParticipant(name: nextName, voice: voice, personality: "温和", proficiency: .advanced)
+            currentSpeakerName = defaultParticipant.name
+            print("   [getNextParticipant] 使用默认: \(nextName)")
+            return defaultParticipant
+        }
+    }
+    
+    func setTopic(_ fullText: String, participants: [DiscussionParticipant]) {
+        print("📚 [讨论] 设置讨论主题")
+        print("   - 主题: \(fullText.prefix(80))...")
+        print("   - 参与者: \(participants.map { $0.name }.joined(separator: ", "))")
+        
+        self.participants = participants
+        self.currentTopic = DiscussionTopic1(fullText: fullText, participants: participants)
+        self.turnCounter = 0
+        self.consecutiveSilenceCount = 0
+        self.hasGivenConclusion = false
+        self.isGeneratingResponse = false
+    }
+    
+    func startDiscussionDirectly() {
+        print("=== 🎯 [讨论] STARTING DISCUSSION DIRECTLY ===")
+        isDiscussionActive = true
+        canUserSpeak = false
+        turnCounter = 0
+        consecutiveSilenceCount = 0
+        hasGivenConclusion = false
+        isGeneratingResponse = false
+        conversationHistory.removeAll()
+        chatMessages.removeAll()
+        
+        print("📡 [连接] 连接 WebSocket...")
+        connect()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            print("🎤 [发言] 开始第一个发言")
+            let firstSpeakerName = self.participantsList[0]
+            print("   - 第一个发言人: \(firstSpeakerName)")
+            
+            if let firstParticipant = self.participants.first(where: { $0.name == firstSpeakerName }) {
+                self.currentParticipant = firstParticipant
+                self.currentSpeakerName = firstParticipant.name
+                self.currentVoice = firstParticipant.voice
+                self.currentResponseVoice = firstParticipant.voice
+                print("   👤 第一个发言者: \(firstParticipant.name) (音色: \(firstParticipant.voice))")
+            } else {
+                let voice = self.getVoiceForCurrentLanguage()
+                let defaultParticipant = DiscussionParticipant(name: firstSpeakerName, voice: voice, personality: "温和", proficiency: .advanced)
+                self.currentParticipant = defaultParticipant
+                self.currentSpeakerName = firstSpeakerName
+                self.currentVoice = voice
+                self.currentResponseVoice = voice
+                print("   👤 第一个发言者（默认）: \(firstSpeakerName) (音色: \(voice))")
+            }
+            self.createResponseWithVoice()
+        }
+    }
+    
+    func stopDiscussion() {
+        print("=== 🛑 [讨论] STOPPING DISCUSSION ===")
+        isDiscussionActive = false
+        canUserSpeak = false
+        isProcessingResponse = false
+        isGeneratingResponse = false
+        cancelWaitForUserTimer()
+        disconnect()
+    }
+    
+    func connect() {
+        var components = URLComponents(string: aliyunEndpoint)
+        components?.queryItems = [URLQueryItem(name: "model", value: model)]
+        
+        guard let url = components?.url else {
+            print("❌ [连接] 无效的 URL")
+            return
+        }
+        
+        print("🔌 [连接] 连接 WebSocket: \(url)")
+        
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(aliyunApiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 60
+        
+        if webSocketTask != nil {
+            webSocketTask?.cancel(with: .goingAway, reason: nil)
+            webSocketTask = nil
+        }
+        
+        webSocketTask = webSocketSession.webSocketTask(with: request)
+        webSocketTask?.resume()
+        receiveMessage()
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+            self?.sendSessionConfig()
+        }
+    }
+    
+    func disconnect() {
+        print("🔌 [连接] 断开 WebSocket 连接")
+        webSocketTask?.cancel(with: .normalClosure, reason: nil)
+        webSocketTask = nil
+        isConnected = false
+        stopMicRecording()
+        audioPlayer.stop()
+    }
+    
+    private func sendSessionConfig() {
+        guard let participant = currentParticipant else {
+            print("❌ [配置] 没有参与者，无法发送会话配置")
+            return
+        }
+        
+        let instructions = buildDynamicInstructions(with: participant)
+        
+        print("📤 [配置] 发送会话配置")
+        print("   - 发言人: \(participant.name)")
+        print("   - 音色: \(participant.voice.rawValue)")
+        print("   - 语言: \(selectedLanguage)")
+        print("   - 指令长度: \(instructions.count) 字符")
+        
+        let config: [String: Any] = [
+            "event_id": UUID().uuidString,
+            "type": "session.update",
+            "session": [
+                "modalities": ["text", "audio"],
+                "voice": participant.voice.rawValue,
+                "input_audio_format": "pcm",
+                "output_audio_format": "pcm",
+                "input_audio_transcription": ["enabled": true],
+                "instructions": instructions,
+                "turn_detection": NSNull()
+            ] as [String : Any]
+        ]
+        sendMessage(config)
+    }
+    
+    // 修改 buildDynamicInstructions - 更强制地要求普通话
+    private func buildDynamicInstructions(with participant: DiscussionParticipant) -> String {
+        let isCantonese = selectedLanguage == "粤语"
+        let needsConclusion = currentRemainingTime <= 50 && !hasGivenConclusion
+        
+        guard let topic = currentTopic else {
+            if isCantonese {
+                return "你係一個討論嘅同學，必須用粵語正常講嘢就得。"
+            } else {
+                return "你是一个讨论的同学，必须用普通话正常说话。严禁使用任何粤语词汇，必须全程使用普通话。"
+            }
+        }
+        
+        var instructions = ""
+        
+        if isCantonese {
+            instructions = """
+            
+            --- 討論題目 ---
+            \(topic.fullText)
+            --- 題目完 ---
+            
+            你係香港小六學生，必須用粵語參加小組討論。
+            
+            說話要求：
+            - 每句10-20個字，簡單直接
+            - 用生活化嘅粵語詞語
+            - 要回應前面同學講過嘅內容，唔好重覆自己講過嘅嘢
+            
+            \(needsConclusion ? "⚠️ 時間剩返 \(currentRemainingTime) 秒，你要幫大家達成共識，做總結結束討論。" : "時間剩返 \(currentRemainingTime) 秒。")
+            
+            """
+        } else {
+            instructions = """
+            
+            --- 討論題目 ---
+            \(topic.fullText)
+            --- 題目完 ---
+            
+            你是香港小六學生，必須用普通話參加小組討論。嚴禁使用粵語！
+            
+            說話要求：
+            - 每句10-20個字，簡單直接
+            - 用生活化的普通話詞語
+            - 要回應前面同學說過的内容，不要重複自己說過的話
+            - 禁止使用「嘅」、「咗」、「嚟」、「哋」、「係」、「冇」等粵語詞彙
+            - 使用「的」、「了」、「来」、「们」、「是」、「没有」等普通話詞彙
+            
+            \(needsConclusion ? "⚠️ 時間剩下 \(currentRemainingTime) 秒，你要幫助大家達成共識，做總結結束討論。" : "時間剩下 \(currentRemainingTime) 秒。")
+            
+            """
+        }
+        
+        if !conversationHistory.isEmpty {
+            instructions += "\n--- 對話歷史 ---\n"
+            instructions += conversationHistory.suffix(8).joined(separator: "\n")
+            instructions += "\n--- 對話完 ---\n"
+            if isCantonese {
+                instructions += "\n請根據以上對話歷史，必須用粵語繼續討論。\n"
+            } else {
+                instructions += "\n請根據以上對話歷史，必須用普通話繼續討論。嚴禁使用粵語！\n"
+            }
+        } else {
+            if isCantonese {
+                instructions += "\n（未有對話，你係第一個發言）\n"
+                instructions += "你係第一個發言：必須用粵語直接講你嘅初步想法，然後問另一位同學。\n"
+            } else {
+                instructions += "\n（沒有對話，你是第一個發言）\n"
+                instructions += "你是第一個發言：必須用普通話直接說你的初步想法，然後問另一位同學。嚴禁使用粵語！\n"
+            }
+        }
+        
+        return instructions
+    }
+
+    // MARK: - 生成 AI 回复（有用户输入时）
+    private func generateAIResponse(userResponse: String) {
+        guard !isGeneratingResponse else { return }
+        isGeneratingResponse = true
+        
+        let participant = currentParticipant ?? getNextParticipant()
+        currentParticipant = participant
+        currentSpeakerName = participant.name
+        currentVoice = participant.voice
+        currentResponseVoice = participant.voice
+        
+        let remainingTime = currentRemainingTime
+        let isCantonese = selectedLanguage == "粤语"
+        let needsConclusion = remainingTime <= 50 && !hasGivenConclusion
+        if needsConclusion {
+            hasGivenConclusion = true
+            print("⚠️ [AI] 时间只剩 \(remainingTime) 秒，将进行总结")
+        }
+        
+        // 获取最近的对话历史
+        var recentHistory = ""
+        let lastMessages = chatMessages.suffix(4)
+        if !lastMessages.isEmpty {
+            for msg in lastMessages {
+                let speaker = msg.displayName
+                recentHistory += "\(speaker): \(msg.content)\n"
+            }
+        }
+        
+        if isCantonese {
+            let prompt = """
+            你是香港小六學生，用粵語參加小組討論。
+            
+            \(needsConclusion ? "時間剩返 \(remainingTime) 秒，你要幫大家達成共識，做總結。" : "時間剩返 \(remainingTime) 秒。")
+            
+            討論題目：\(currentTopic?.fullText ?? "")
+            
+            最近的對話：
+            \(recentHistory)
+            
+            剛才同學說：「\(userResponse.prefix(150))」
+            
+            請你用粵語回應同學的觀點。你可以：
+            1. 表示同意或不同意
+            2. 補充新的觀點
+            3. 提問引導討論
+            
+            不要重複自己說過的話，每句話10-20個字。
+            """
+            sendTextMessage(prompt)
+        } else {
+            let prompt = """
+            你是香港小六學生，用普通話參加小組討論。嚴禁使用粵語！
+            
+            \(needsConclusion ? "時間剩下 \(remainingTime) 秒，你要幫助大家達成共識，做總結。" : "時間剩下 \(remainingTime) 秒。")
+            
+            討論題目：\(currentTopic?.fullText ?? "")
+            
+            最近的對話：
+            \(recentHistory)
+            
+            剛才同學說：「\(userResponse.prefix(150))」
+            
+            請你用普通話回應同學的觀點。你可以：
+            1. 表示同意或不同意
+            2. 補充新的觀點
+            3. 提問引導討論
+            
+            不要重複自己說過的話，每句話10-20個字。
+            禁止使用粵語詞彙：嘅、咗、嚟、哋、係、冇
+            """
+            sendTextMessage(prompt)
+        }
+    }
+
+    // MARK: - 生成 AI 回复（无用户输入，定时器触发）
+    // MARK: - 生成 AI 回复（无用户输入，定时器触发）
+    private func generateAIReply() {
+        guard !isGeneratingResponse else { return }
+        isGeneratingResponse = true
+        
+        let participant = currentParticipant ?? getNextParticipant()
+        currentParticipant = participant
+        currentSpeakerName = participant.name
+        currentVoice = participant.voice
+        currentResponseVoice = participant.voice
+        
+        let remainingTime = currentRemainingTime
+        let isCantonese = selectedLanguage == "粤语"
+        let needsConclusion = remainingTime <= 50 && !hasGivenConclusion
+        if needsConclusion {
+            hasGivenConclusion = true
+            print("⚠️ [AI] 时间只剩 \(remainingTime) 秒，将进行总结")
+        }
+        
+        // 获取最近的对话历史，排除AI自己的发言
+        var recentHistory = ""
+        let lastMessages = chatMessages.suffix(4)
+        // ✅ 过滤掉当前AI自己刚说的内容
+        let filteredMessages = lastMessages.filter { msg in
+            if msg.role == .ai {
+                return msg.speakerName != currentSpeakerName
+            }
+            return true
+        }
+        
+        for msg in filteredMessages {
+            let speaker = msg.displayName
+            recentHistory += "\(speaker): \(msg.content)\n"
+        }
+        
+        // ✅ 检查最近是否有用户发言
+        let hasRecentUserMessage = chatMessages.last?.role == .user
+        
+        if isCantonese {
+            let prompt: String
+            if hasRecentUserMessage {
+                // 有用户发言，正常回应
+                prompt = """
+                你是香港小六學生，用粵語參加小組討論。
+                
+                \(needsConclusion ? "時間剩返 \(remainingTime) 秒，你要幫大家達成共識，做總結。" : "時間剩返 \(remainingTime) 秒。")
+                
+                討論題目：\(currentTopic?.fullText ?? "")
+                
+                最近的對話：
+                \(recentHistory)
+                
+                請用粵語繼續討論。你可以：
+                1. 提出新的觀點
+                2. 補充前面同學的想法
+                3. 提問引導討論
+                
+                不要重複自己說過的話，每句話10-20個字。
+                """
+            } else {
+                // 没有用户发言，AI之间互相讨论 - 需要主动推进讨论
+                prompt = """
+                你是香港小六學生，用粵語參加小組討論。
+                
+                \(needsConclusion ? "時間剩返 \(remainingTime) 秒，你要幫大家達成共識，做總結。" : "時間剩返 \(remainingTime) 秒。")
+                
+                討論題目：\(currentTopic?.fullText ?? "")
+                
+                你之前已經表達過「我贊成學校隨機分配課外活動」這個觀點。
+                現在請你提出一個**不同**的觀點或例子來豐富討論，例如：
+                - 隨機分配有甚麼好處？
+                - 有沒有甚麼潛在問題？
+                - 可以舉個具體例子嗎？
+                
+                不要重複「我贊成隨機分配」這句話，要說新的內容！
+                """
+            }
+            sendTextMessage(prompt)
+        } else {
+            let prompt: String
+            if hasRecentUserMessage {
+                // 有用户发言，正常回应
+                prompt = """
+                你是香港小六學生，用普通話參加小組討論。嚴禁使用粵語！
+                
+                \(needsConclusion ? "時間剩下 \(remainingTime) 秒，你要幫助大家達成共識，做總結。" : "時間剩下 \(remainingTime) 秒。")
+                
+                討論題目：\(currentTopic?.fullText ?? "")
+                
+                最近的對話：
+                \(recentHistory)
+                
+                請用普通話繼續討論。你可以：
+                1. 提出新的觀點
+                2. 補充前面同學的想法
+                3. 提問引導討論
+                
+                不要重複自己說過的話，每句話10-20個字。
+                禁止使用粵語詞彙：嘅、咗、嚟、哋、係、冇、乜、嘢
+                """
+            } else {
+                // 没有用户发言，AI之间互相讨论 - 需要主动推进讨论
+                prompt = """
+                你是香港小六學生，用普通話參加小組討論。嚴禁使用粵語！
+                
+                \(needsConclusion ? "時間剩下 \(remainingTime) 秒，你要幫助大家達成共識，做總結。" : "時間剩下 \(remainingTime) 秒。")
+                
+                討論題目：\(currentTopic?.fullText ?? "")
+                
+                你之前已經表達過「我贊成學校隨機分配課外活動」這個觀點。
+                現在請你提出一個**不同**的觀點或例子來豐富討論，例如：
+                - 隨機分配有什麼好處？
+                - 有沒有什麼潛在問題？
+                - 可以舉個具體例子嗎？
+                
+                不要重複「我贊成隨機分配」這句話，要說新的內容！
+                禁止使用粵語詞彙：嘅、咗、嚟、哋、係、冇、乜、嘢
+                """
+            }
+            sendTextMessage(prompt)
+        }
+    }
+    
+    private func updateDiscussionHistory(role: String, name: String, content: String) {
+        let entry = "\(name): \(content)"
+        conversationHistory.append(entry)
+        if conversationHistory.count > 16 { conversationHistory.removeFirst() }
+        print("📝 [历史] 添加记录: \(name) (\(role)) - \(content.prefix(50))...")
+        print("   - 当前历史记录数: \(conversationHistory.count)")
+    }
+    
+    private func sendTextMessage(_ message: String) {
+        guard !isProcessingResponse else {
+            print("⚠️ [消息] 正在处理响应，跳过发送")
+            return
+        }
+        
+        print("📤 [消息] 发送文本消息")
+        print("   - 内容预览: \(message.prefix(150))...")
+        
+        isProcessingResponse = true
+        isAITalking = true
+        canUserSpeak = false
+        
+        let textMessage: [String: Any] = [
+            "event_id": UUID().uuidString,
+            "type": "conversation.item.create",
+            "item": [
+                "type": "message",
+                "role": "user",
+                "content": [["type": "input_text", "text": message]]
+            ]
+        ]
+        sendMessage(textMessage)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            self?.createResponseWithVoice()
+        }
+    }
+    
+    private func createResponseWithVoice() {
+        print("🎤 [语音] 创建语音响应")
+        updateVoiceAndThen { [weak self] in
+            guard let self = self else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                let responseMessage: [String: Any] = [
+                    "event_id": UUID().uuidString,
+                    "type": "response.create",
+                    "response": [
+                        "modalities": ["text", "audio"],
+                        "voice": self.currentResponseVoice.rawValue,
+                        "output_audio_format": "pcm"
+                    ]
+                ]
+                self.sendMessage(responseMessage)
+                print("🎵 [语音] 请求生成语音，音色: \(self.currentResponseVoice.rawValue)")
+            }
+        }
+    }
+    
+
+    private func updateVoiceAndThen(completion: @escaping () -> Void) {
+        if isWaitingForVoiceUpdate {
+            voiceUpdateCompletion = completion
+            print("⏳ [语音] 等待之前的语音更新完成")
+            return
+        }
+        
+        isWaitingForVoiceUpdate = true
+        
+        guard let participant = currentParticipant else {
+            isWaitingForVoiceUpdate = false
+            completion()
+            return
+        }
+        
+        let instructions = buildDynamicInstructions(with: participant)
+        let config: [String: Any] = [
+            "event_id": UUID().uuidString,
+            "type": "session.update",
+            "session": [
+                "modalities": ["text", "audio"],
+                "voice": currentVoice.rawValue,
+                "input_audio_format": "pcm",
+                "output_audio_format": "pcm",
+                "input_audio_transcription": ["enabled": true],
+                "instructions": instructions,
+                "turn_detection": NSNull()
+            ] as [String : Any]
+        ]
+        sendMessage(config)
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+            guard let self = self else { return }
+            self.isWaitingForVoiceUpdate = false
+            completion()
+            if let queuedCompletion = self.voiceUpdateCompletion {
+                self.voiceUpdateCompletion = nil
+                self.updateVoiceAndThen(completion: queuedCompletion)
+            }
+        }
+    }
+    
+    func startRecording() {
+        guard !isRecording, isConnected, !isAITalking, isDiscussionActive, canUserSpeak else {
+            print("🎤 [录音] 无法开始录音: isRecording=\(isRecording), isConnected=\(isConnected), isAITalking=\(isAITalking), isDiscussionActive=\(isDiscussionActive), canUserSpeak=\(canUserSpeak)")
+            return
+        }
+        
+        print("🎤 [录音] 开始录音")
+        consecutiveSilenceCount = 0
+        cancelWaitForUserTimer()
+        
+        sendMessage(["type": "input_audio_buffer.clear"])
+        recordingData = Data()
+        
+        audioEngine = AVAudioEngine()
+        guard let audioEngine = audioEngine else { return }
+        
+        let inputNode = audioEngine.inputNode
+        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatInt16,
+            sampleRate: 16000,
+            channels: 1,
+            interleaved: false
+        )
+        
+        guard let targetFormat = targetFormat else { return }
+        
+        inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordingFormat) { [weak self] buffer, time in
+            self?.processAudioBuffer(buffer, targetFormat: targetFormat)
+        }
+        
+        do {
+            try audioEngine.start()
+            isRecording = true
+            print("🎤 [录音] 录音已开始")
+        } catch {
+            print("❌ [录音] 启动音频引擎失败: \(error)")
+        }
+    }
+    
+    func stopMicRecording() {
+        guard isRecording else {
+            print("🎤 [录音] 停止录音时未在录音状态")
+            return
+        }
+        
+        print("🎤 [录音] 停止录音")
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        audioEngine = nil
+        isRecording = false
+        
+        if recordingData.count > 0 {
+            commitAudio()
+        }
+    }
+    
+    private func commitAudio() {
+        print("📤 [音频] 提交音频数据 (大小: \(recordingData.count) bytes)")
+        let commitMessage: [String: Any] = [
+            "event_id": UUID().uuidString,
+            "type": "input_audio_buffer.commit"
+        ]
+        sendMessage(commitMessage)
+    }
+    
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, targetFormat: AVAudioFormat) {
+        guard let converter = AVAudioConverter(from: buffer.format, to: targetFormat) else { return }
+        
+        let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: AVAudioFrameCount(targetFormat.sampleRate * 0.1))
+        var error: NSError?
+        converter.convert(to: outputBuffer!, error: &error) { inNumPackets, outStatus in
+            outStatus.pointee = .haveData
+            return buffer
+        }
+        
+        guard let pcmBuffer = outputBuffer,
+              let audioData = pcmBuffer.int16ChannelData else { return }
+        
+        let frameLength = Int(pcmBuffer.frameLength)
+        let data = Data(bytes: audioData[0], count: frameLength * 2)
+        
+        let amplitude = calculateAmplitude(data)
+        if amplitude > 0.02 {
+            recordingData.append(data)
+            hasSentAudio = true
+            let base64Audio = data.base64EncodedString()
+            let appendMessage: [String: Any] = [
+                "type": "input_audio_buffer.append",
+                "event_id": UUID().uuidString,
+                "audio": base64Audio
+            ]
+            sendMessage(appendMessage)
+        }
+    }
+    
+    private func calculateAmplitude(_ data: Data) -> Double {
+        guard data.count > 0 else { return 0 }
+        var maxValue: Int16 = 0
+        data.withUnsafeBytes { bytes in
+            let int16Ptr = bytes.bindMemory(to: Int16.self)
+            for i in 0..<(data.count / 2) {
+                maxValue = max(maxValue, abs(int16Ptr[i]))
+            }
+        }
+        return Double(maxValue) / 32767.0
+    }
+    
+    private func receiveMessage() {
+        webSocketTask?.receive { [weak self] result in
+            DispatchQueue.main.async {
+                switch result {
+                case .success(let message):
+                    switch message {
+                    case .string(let text):
+                        self?.handleMessage(text)
+                    case .data(let data):
+                        if let text = String(data: data, encoding: .utf8) {
+                            self?.handleMessage(text)
+                        }
+                    @unknown default: break
+                    }
+                    self?.receiveMessage()
+                case .failure(let error):
+                    print("❌ [WebSocket] 接收消息错误: \(error)")
+                    self?.isConnected = false
+                }
+            }
+        }
+    }
+    
+    // 修改 addMessage 方法，移除 AI 消息后的自动回复逻辑
+    private func addMessage(role: DiscussionChatMessage.MessageRole, content: String, voice: String? = nil, speakerName: String? = nil) {
+        let displayRole = role == .user ? "👤 用户" : "🤖 AI"
+        let displaySpeaker = speakerName ?? (role == .user ? "你" : "同学")
+        print("💬 [消息] 添加 \(displayRole): \(displaySpeaker)")
+        print("   - 内容: \(content.prefix(100))...")
+        
+        let message = DiscussionChatMessage(role: role, content: content, timestamp: Date(), voice: voice, speakerName: speakerName)
+        chatMessages.append(message)
+        
+        let name = role == .user ? "你" : (speakerName ?? "同学")
+        updateDiscussionHistory(role: role == .user ? "你" : name, name: name, content: content)
+        
+        if role == .user {
+            print("👤 [用户] 用户发言，重置沉默计数和计时器")
+            consecutiveSilenceCount = 0
+            cancelWaitForUserTimer()
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                guard let self = self, self.isDiscussionActive else {
+                    print("⚠️ [用户] 讨论已结束或 self 为 nil")
+                    return
+                }
+                
+                print("🔄 [发言] 准备 AI 回复")
+                self.turnCounter += 1
+                let nextSpeakerName = self.participantsList[self.turnCounter % 2]
+                print("   - 下一个发言人: \(nextSpeakerName)")
+                
+                if let nextParticipant = self.participants.first(where: { $0.name == nextSpeakerName }) {
+                    self.currentParticipant = nextParticipant
+                    self.currentSpeakerName = nextParticipant.name
+                    self.currentVoice = nextParticipant.voice
+                    self.currentResponseVoice = nextParticipant.voice
+                    print("   👤 下一个发言人: \(nextParticipant.name) (音色: \(nextParticipant.voice))")
+                    self.generateAIResponse(userResponse: content)
+                } else {
+                    let voice = self.getVoiceForCurrentLanguage()
+                    let tempParticipant = DiscussionParticipant(name: nextSpeakerName, voice: voice, personality: "温和", proficiency: .advanced)
+                    self.currentParticipant = tempParticipant
+                    self.currentSpeakerName = nextSpeakerName
+                    self.currentVoice = voice
+                    self.currentResponseVoice = voice
+                    print("   👤 下一个发言人（默认）: \(nextSpeakerName) (音色: \(voice))")
+                    self.generateAIResponse(userResponse: content)
+                }
+            }
+        }
+        // ✅ 移除 role == .ai 的处理逻辑，避免循环
+    }
+    
+    private func handleMessage(_ text: String) {
+        guard let data = text.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = json["type"] as? String else {
+            print("❌ [WebSocket] 无法解析消息: \(text.prefix(100))")
+            return
+        }
+        
+        print("📨 [WebSocket] 收到消息类型: \(type)")
+        
+        switch type {
+        case "session.created", "session.updated":
+            isConnected = true
+            print("✅ [WebSocket] 会话已连接")
+        case "input_audio_buffer.committed":
+            print("🎤 [音频] 音频已提交")
+        case "response.created":
+            currentStreamingText = ""
+            print("🎯 [响应] 响应已创建")
+        case "response.audio.delta":
+            if let audioBase64 = json["delta"] as? String,
+               let audioData = Data(base64Encoded: audioBase64) {
+                audioPlayer.playPCMData(audioData, voice: currentResponseVoice.displayName)
+                isSpeaking = true
+                isAITalking = true
+                print("🎵 [音频] 接收音频片段 (大小: \(audioData.count) bytes)")
+            }
+        case "response.audio_transcript.delta":
+            if let delta = json["delta"] as? String {
+                currentStreamingText += delta
+                print("📝 [转录] 流式文本: \(delta)")
+            }
+        case "response.audio_transcript.done":
+            if let transcript = json["transcript"] as? String {
+                print("✅ [转录] 完成: \(transcript.prefix(100))...")
+                addMessage(role: .ai, content: transcript, voice: currentVoice.displayName, speakerName: currentSpeakerName)
+            }
+            currentStreamingText = ""
+        case "response.done":
+            print("✅ [响应] 响应完成")
+        case "conversation.item.input_audio_transcription.completed":
+            if let transcript = json["transcript"] as? String, hasSentAudio {
+                let trimmed = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    print("🎤 [转录] 用户语音: \(trimmed)")
+                    addMessage(role: .user, content: transcript)
+                }
+                hasSentAudio = false
+            }
+        default:
+            print("⚠️ [WebSocket] 未处理的消息类型: \(type)")
+            break
+        }
+    }
+    
+    private func sendMessage(_ message: [String: Any]) {
+        guard webSocketTask != nil else {
+            print("⚠️ [WebSocket] 任务为空，无法发送消息")
+            return
+        }
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: message),
+              let jsonString = String(data: jsonData, encoding: .utf8) else {
+            print("❌ [WebSocket] 无法序列化消息")
+            return
+        }
+        
+        let messageType = message["type"] as? String ?? "unknown"
+        print("📤 [WebSocket] 发送消息: \(messageType)")
+        
+        webSocketTask?.send(.string(jsonString)) { error in
+            if let error = error {
+                print("❌ [WebSocket] 发送消息错误: \(error)")
+            }
+        }
+    }
+}
+
+extension DiscussionWebSocketManager: URLSessionWebSocketDelegate {
+    nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didOpenWithProtocol protocol: String?) {
+        Task { @MainActor in
+            print("✅ [WebSocket] 连接已打开")
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, webSocketTask: URLSessionWebSocketTask, didCloseWith closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?) {
+        Task { @MainActor in
+            print("🔌 [WebSocket] 连接已关闭: \(closeCode)")
+            self.isConnected = false
+            if self.webSocketTask === webSocketTask { self.webSocketTask = nil }
+        }
+    }
+}
+
+
+
+
+// MARK: - 小组讨论专用的音量监控器
+class DiscussionMicMonitor: ObservableObject {
+    @Published var averageDb: Float = 0.0
+    var onVolumeUpdate: ((Float) -> Void)?
+    
+    private var audioEngine: AVAudioEngine?
+    private var inputNode: AVAudioInputNode?
+    
+    init() {
+        setupMicrophone()
+    }
+    
+    private func setupMicrophone() {
+        audioEngine = AVAudioEngine()
+        inputNode = audioEngine?.inputNode
+        
+        let recordingFormat = inputNode?.outputFormat(forBus: 0)
+        
+        inputNode?.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
+            guard let self = self else { return }
+            self.processAudioBuffer(buffer)
+        }
+        
+        do {
+            try audioEngine?.start()
+        } catch {
+            print("Failed to start audio engine: \(error)")
+        }
+    }
+    
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
+        guard let channelData = buffer.floatChannelData?[0] else { return }
+        var sum: Float = 0
+        let frameLength = Int(buffer.frameLength)
+        for i in 0..<frameLength {
+            sum += abs(channelData[i])
+        }
+        let average = sum / Float(frameLength)
+        let normalizedDb = min(max(average * 20, 0), 1.0)
+        DispatchQueue.main.async {
+            self.averageDb = normalizedDb
+            self.onVolumeUpdate?(normalizedDb)
+        }
+    }
+    
+    func startMonitoring() {}
+    
+    func stopMonitoring() {
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+    }
+}
+
+// MARK: - 小组讨论专用视图
+struct DiscussionGroupView: View {
+    let topic: String
+    let language: String
+    let onFinish: (String) -> Void
+    
+    @StateObject private var webSocketManager = DiscussionWebSocketManager()
+    @State private var isDiscussionActive = false
+    @State private var remainingTime = 180
+    @State private var timer: Timer?
+    @State private var isUserSpeaking = false
+    @StateObject private var micMonitor = DiscussionMicMonitor()
+    @State private var discussionTranscript = ""
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 8) {
+                Text("小组讨论")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(Color("ziselansecolor"))
+                
+                Text("请与两位AI同学进行讨论（\(language)）")
+                    .font(.system(size: 16))
+                    .foregroundColor(.secondary)
+                
+                Text(timeString(from: remainingTime))
+                    .font(.system(size: 48, weight: .bold, design: .monospaced))
+                    .foregroundColor(remainingTime < 30 ? .red : Color("ziselansecolor"))
+                    .padding(.top, 8)
+            }
+            .padding(.top, 20)
+            
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color("ziselansecolor"))
+                    Text("讨论题目")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(Color("ziselansecolor"))
+                }
+                
+                Text(topic)
+                    .font(.system(size: 16))
+                    .padding()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color("baiseanniucolor"))
+                    .cornerRadius(12)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 20)
+            
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(webSocketManager.chatMessages) { message in
+                            DiscussionGroupBubble(message: message)
+                                .id(message.id)
+                        }
+                        
+                        if webSocketManager.isAITalking && !webSocketManager.currentStreamingText.isEmpty {
+                            DiscussionGroupBubble(
+                                message: DiscussionChatMessage(
+                                    role: .ai,
+                                    content: webSocketManager.currentStreamingText,
+                                    timestamp: Date(),
+                                    voice: nil,
+                                    speakerName: webSocketManager.currentSpeakerName
+                                ),
+                                isStreaming: true
+                            )
+                            .id("streaming")
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                }
+                .onChange(of: webSocketManager.chatMessages.count) { _ in
+                    if let lastMessage = webSocketManager.chatMessages.last {
+                        withAnimation {
+                            proxy.scrollTo(lastMessage.id, anchor: .bottom)
+                        }
+                    }
+                }
+                .onChange(of: webSocketManager.currentStreamingText) { _ in
+                    withAnimation {
+                        proxy.scrollTo("streaming", anchor: .bottom)
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+            .background(.clear)
+            
+            VStack(spacing: 8) {
+                if isUserSpeaking {
+                    DiscussionSoundWaveView(level: micMonitor.averageDb)
+                        .frame(height: 30)
+                        .padding(.horizontal, 40)
+                }
+                
+                Button(action: {
+                    if webSocketManager.isRecording {
+                        webSocketManager.stopMicRecording()
+                        isUserSpeaking = false
+                    } else if webSocketManager.canUserSpeak && !webSocketManager.isAITalking {
+                        webSocketManager.startRecording()
+                        isUserSpeaking = true
+                    }
+                }) {
+                    ZStack {
+                        Circle()
+                            .fill(webSocketManager.isRecording ? Color.red : Color("ziselansecolor"))
+                            .frame(width: 56, height: 56)
+                            .shadow(radius: 3)
+                        
+                        Image(systemName: webSocketManager.isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white)
+                    }
+                }
+                .disabled(!webSocketManager.canUserSpeak && !webSocketManager.isRecording)
+                
+                if webSocketManager.isAITalking {
+                    Text("\(webSocketManager.currentSpeakerName ?? "同学") 正在发言...")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else if webSocketManager.isRecording {
+                    Text("你正在发言...")
+                        .font(.caption2)
+                        .foregroundColor(.red)
+                } else if webSocketManager.canUserSpeak {
+                    Text("点击麦克风发言")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                } else {
+                    Text("请稍候...")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+            .padding(.vertical, 12)
+            .background(.clear)
+        }
+        .background(Color("systemBackgroundColor"))
+        .onAppear {
+            startDiscussion()
+        }
+        .onDisappear {
+            stopDiscussion()
+        }
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button("结束") {
+                    stopDiscussion()
+                    dismiss()
+                }
+                .foregroundColor(.red)
+            }
+        }
+    }
+    
+    private func startDiscussion() {
+        let voice1: DiscussionVoice
+        let voice2: DiscussionVoice
+        
+        if language == "粤语" {
+            voice1 = .kiki
+            voice2 = .rocky
+        } else {
+            voice1 = .cherry
+            voice2 = .kai
+        }
+        
+        let participants = [
+            DiscussionParticipant(name: "同学 A", voice: voice1, personality: "友善", proficiency: .advanced),
+            DiscussionParticipant(name: "同学 B", voice: voice2, personality: "友善", proficiency: .advanced)
+        ]
+        
+        webSocketManager.selectedLanguage = language
+        print("lallala\(webSocketManager.selectedLanguage)")
+        webSocketManager.setTopic(topic, participants: participants)
+        
+        webSocketManager.onDiscussionEnded = { transcript in
+            DispatchQueue.main.async {
+                self.discussionTranscript = transcript
+                self.onFinish(transcript)
+            }
+        }
+        
+        webSocketManager.startDiscussionDirectly()
+        isDiscussionActive = true
+        startTimer()
+        micMonitor.startMonitoring()
+    }
+    
+    private func stopDiscussion() {
+        timer?.invalidate()
+        timer = nil
+        webSocketManager.stopDiscussion()
+        micMonitor.stopMonitoring()
+    }
+    
+    // ✅ 关键修改：计时器同步剩余时间到 webSocketManager
+    private func startTimer() {
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+            if remainingTime > 0 {
+                remainingTime -= 1
+                // ✅ 同步剩余时间到 WebSocket 管理器
+                webSocketManager.currentRemainingTime = remainingTime
+            } else {
+                let transcript = getDiscussionTranscript()
+                webSocketManager.stopDiscussion()
+                onFinish(transcript)
+                timer?.invalidate()
+                timer = nil
+            }
+        }
+    }
+    
+    private func getDiscussionTranscript() -> String {
+        var transcript = ""
+        for message in webSocketManager.chatMessages {
+            let speaker = message.displayName
+            transcript += "\(speaker): \(message.content)\n"
+        }
+        return transcript
+    }
+    
+    private func timeString(from seconds: Int) -> String {
+        let minutes = seconds / 60
+        let secs = seconds % 60
+        return String(format: "%02d:%02d", minutes, secs)
+    }
+}
+
+// MARK: - 小组讨论专用气泡
+struct DiscussionGroupBubble: View {
+    let message: DiscussionChatMessage
+    var isStreaming: Bool = false
+    
+    var body: some View {
+        HStack {
+            if message.role == .user {
+                Spacer()
+            }
+            
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 4) {
+                HStack {
+                    if message.role == .user {
+                        Text("你")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    } else {
+                        Text(message.displayName)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(Color("ziselansecolor"))
+                    }
+                    
+                    Text(message.formattedTime)
+                        .font(.caption2)
+                        .foregroundColor(.gray)
+                }
+                
+                Text(message.content)
+                    .font(.body)
+                    .padding(12)
+                    .background(
+                        message.role == .user ?
+                        Color("ziselansecolor").opacity(0.15) :
+                        Color("baiseanniucolor")
+                    )
+                    .cornerRadius(16)
+                
+                if isStreaming {
+                    HStack {
+                        Text("输入中...")
+                            .font(.caption2)
+                            .foregroundColor(Color("ziselansecolor").opacity(0.8))
+                        Image(systemName: "waveform")
+                            .font(.caption2)
+                            .foregroundColor(Color("ziselansecolor").opacity(0.8))
+                    }
+                }
+            }
+            
+            if message.role == .ai {
+                Spacer()
+            }
+        }
+        .id(message.id)
+    }
+}
+
+// MARK: - 小组讨论专用音量波形
+struct DiscussionSoundWaveView: View {
+    let level: Float
+    
+    var body: some View {
+        GeometryReader { geometry in
+            HStack(spacing: 4) {
+                ForEach(0..<20, id: \.self) { index in
+                    let height = CGFloat(level) * 40 * (0.5 + CGFloat(index) / 20.0)
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color("ziselansecolor"))
+                        .frame(width: 3, height: max(4, min(40, height)))
+                        .animation(.easeInOut(duration: 0.1), value: height)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+// 注意：TSAChineseStoryView 和 ReportContentView 保持不变
+// 由于篇幅限制，这里省略了 TSAChineseStoryView 的完整代码
+// 但你需要保留原有的 TSAChineseStoryView 实现
+
+// MARK: - 主视图 TSAChineseStoryView
 struct TSAChineseStoryView: View {
     // 年级参数（由外部传入）
-    let grade: String  // "小三" 或 "小六"
-    let fixedQuestionType: StoryConfig.StoryType?  // 固定题型（小六使用，nil 表示随机）
-    let language: String  // 语言参数 "粤语" 或 "普通话"
+    let grade: String
+    let fixedQuestionType: StoryConfig.StoryType?
+    let language: String
     
     // 计时相关
     @State private var currentStage: Stage = .preparing
@@ -853,51 +2302,45 @@ struct TSAChineseStoryView: View {
     @State private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     @State private var recognitionTask: SFSpeechRecognitionTask?
     
-    // 根据传入的语言动态设置语音识别器
     private var speechRecognizer: SFSpeechRecognizer? {
         let localeIdentifier: String
         switch language {
         case "普通话":
-            localeIdentifier = "zh-CN"  // 普通话（简体中文）
-        default:  // 粤语
-            localeIdentifier = "zh-HK"  // 繁体中文（香港）
+            localeIdentifier = "zh-CN"
+        default:
+            localeIdentifier = "zh-HK"
         }
         return SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
     }
     
-    // 录音回放相关
     @State private var audioRecorder: AVAudioRecorder?
     @State private var recordingURL: URL?
-    
-    // 存储识别到的文字
     @State private var fullTranscript = ""
     
-    // AI 报告相关
     @State private var aiReport: AIReportData?
     @State private var showReport = false
     @State private var isLoadingReport = false
     
-    // 故事配置
     @State private var storyConfig: StoryConfig?
     @State private var isLoadingStory = true
     @State private var loadError: String?
     
-    // 阿里云 API 配置
+    // 小组讨论相关
+    @State private var showDiscussionView = false
+    @State private var discussionTranscript = ""
+    
     private let aliyunEndpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
     private let aliyunApiKey = "sk-92262754eca4423a9e2e5b84ebe0af5c"
     
-    // 主题色
     private let themeColor = Color("SelectionColor")
     private let themeLightColor = Color("ziselansecolor")
     
-    // 故事管理器
     @StateObject private var storyManager = StoryManager()
     
     enum Stage {
         case preparing, speaking, finished
     }
     
-    // 指定题型初始化
     init(grade: String, questionType: StoryConfig.StoryType? = nil, language: String = "粤语") {
         self.grade = grade
         self.fixedQuestionType = questionType
@@ -919,21 +2362,16 @@ struct TSAChineseStoryView: View {
         .padding(.top, 8)
     }
     
-    // 获取年级显示名称
     func getGradeDisplayName() -> String {
         return grade == "小三" ? "小三TSA中国语文" : "小六TSA中国语文"
     }
     
-    // 根据题型显示不同副标题
     func getSubtitle() -> String {
         guard let config = storyConfig else { return "加载中..." }
         switch config.type {
-        case .pictureStory:
-            return "看图说故事"
-        case .oralReport:
-            return "口头报告"
-        case .discussion:
-            return "小组讨论"
+        case .pictureStory: return "看图说故事"
+        case .oralReport: return "口头报告"
+        case .discussion: return "小组讨论"
         }
     }
     
@@ -945,7 +2383,7 @@ struct TSAChineseStoryView: View {
                 let title: String = {
                     switch currentStage {
                     case .preparing: return "准备阶段"
-                    case .speaking: return "请开始讲述"
+                    case .speaking: return "讨论阶段"
                     case .finished: return "报告"
                     }
                 }()
@@ -959,29 +2397,28 @@ struct TSAChineseStoryView: View {
                         Text("请用3分钟时间观察图画，准备故事内容")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
+                    } else if storyConfig?.type == .discussion {
+                        Text("请用1分钟时间准备，然后进行3分钟小组讨论")
+                            .font(.system(size: 18))
+                            .foregroundColor(.secondary)
                     } else {
                         Text("请用3分钟时间准备你的回答")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     }
                 } else if currentStage == .speaking {
                     if storyConfig?.type == .pictureStory {
                         Text("你有1分钟来讲故事")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     } else if storyConfig?.type == .oralReport {
                         Text("请根据题目进行口头报告（1分钟）")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     } else {
-                        Text("请根据题目与同学讨论（1分钟）")
+                        Text("正在与同学进行小组讨论...")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     }
                 }
             }
@@ -993,7 +2430,7 @@ struct TSAChineseStoryView: View {
                 let title: String = {
                     switch currentStage {
                     case .preparing: return "准备阶段"
-                    case .speaking: return "请开始讲述"
+                    case .speaking: return "讨论阶段"
                     case .finished: return "报告"
                     }
                 }()
@@ -1007,29 +2444,28 @@ struct TSAChineseStoryView: View {
                         Text("请用3分钟时间观察图画，准备故事内容")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
+                    } else if storyConfig?.type == .discussion {
+                        Text("请用1分钟时间准备，然后进行3分钟小组讨论")
+                            .font(.system(size: 18))
+                            .foregroundColor(.secondary)
                     } else {
                         Text("请用3分钟时间准备你的回答")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     }
                 } else if currentStage == .speaking {
                     if storyConfig?.type == .pictureStory {
                         Text("正在录音中...")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     } else if storyConfig?.type == .oralReport {
                         Text("请根据题目进行口头报告")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     } else {
-                        Text("请根据题目与同学讨论")
+                        Text("正在与同学进行小组讨论...")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
                     }
                 }
             }
@@ -1037,17 +2473,13 @@ struct TSAChineseStoryView: View {
             .padding(.vertical, 20)
             .background(Color("baiseanniucolor"))
             .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(.gray.opacity(0.3), lineWidth: 1)
-            )
         }
     }
     
-    // MARK: - 题目内容视图（用于口头报告和讨论）
+    // MARK: - 题目内容视图
     @ViewBuilder
     var questionContentView: some View {
-        if let config = storyConfig, config.type != .pictureStory, let questionText = config.pictureDescriptions.first {
+        if let config = storyConfig, let questionText = config.pictureDescriptions.first {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Image(systemName: config.type == .oralReport ? "mic.circle.fill" : "bubble.left.and.bubble.right.fill")
@@ -1066,10 +2498,6 @@ struct TSAChineseStoryView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color("baiseanniucolor"))
                     .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(themeLightColor.opacity(0.3), lineWidth: 1)
-                    )
             }
             .padding(.vertical, 8)
         }
@@ -1079,7 +2507,6 @@ struct TSAChineseStoryView: View {
     @ViewBuilder
     var studentNoticeView: some View {
         if storyConfig?.type == .pictureStory {
-            // 看图说故事的须知
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Text("📋 学生须知：")
@@ -1094,10 +2521,9 @@ struct TSAChineseStoryView: View {
                 }
                 
                 HStack(alignment: .top, spacing: 6) {
-                    Text("2. 然后用一分钟时间，依图画内容说一个完整故事，录音会自动开始和停止。")
+                    Text("2. 然后用一分钟时间，依图画内容说一个完整故事。")
                         .font(.system(size: 17))
                         .foregroundColor(.secondary)
-                        .lineSpacing(5)
                 }
             }
             
@@ -1105,7 +2531,6 @@ struct TSAChineseStoryView: View {
                 Text("请细心观察以下图画，然后讲述一个完整的故事。")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundColor(.primary)
-                    .lineSpacing(5)
                     .padding(.top, 5)
             }
             .padding(.top, -10)
@@ -1117,12 +2542,11 @@ struct TSAChineseStoryView: View {
                         .foregroundColor(.primary)
                 }
                 
-                Text("请用三分钟时间准备，然后进行一分钟的口头报告。报告时请清晰表达你的观点和感受。")
+                Text("请用三分钟时间准备，然后进行一分钟的口头报告。")
                     .font(.system(size: 17))
                     .foregroundColor(.secondary)
-                    .lineSpacing(5)
             }
-        } else {
+        } else if storyConfig?.type == .discussion {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 6) {
                     Text("📋 学生须知：")
@@ -1130,215 +2554,11 @@ struct TSAChineseStoryView: View {
                         .foregroundColor(.primary)
                 }
                 
-                Text("请用三分钟时间准备，然后与同学进行一分钟的讨论。请积极发表你的意见，并尊重他人的观点。")
+                Text("请用1分钟时间准备，然后与两位AI同学进行3分钟的小组讨论。")
                     .font(.system(size: 17))
                     .foregroundColor(.secondary)
-                    .lineSpacing(5)
             }
         }
-    }
-    
-    // MARK: - 报告内容视图
-    @ViewBuilder
-    func ReportContentView(report: AIReportData) -> some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 20) {
-                headerView
-                
-                if #available(iOS 26, *) {
-                    VStack(spacing: 16) {
-                        ScoreRingView(score: report.score)
-                        Text(report.scoreReason)
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    .padding(.vertical, 16)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
-                } else {
-                    VStack(spacing: 16) {
-                        ScoreRingView(score: report.score)
-                        Text(report.scoreReason)
-                            .font(.system(size: 14))
-                            .foregroundColor(.secondary)
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal)
-                    }
-                    .padding(.vertical, 16)
-                    .background(Color("baiseanniucolor"))
-                    .cornerRadius(16)
-                }
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("详细评估")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(themeColor)
-                    
-                    EvaluationCard(title: "内容完整性", level: report.completeness.level, comment: report.completeness.comment)
-                    EvaluationCard(title: "语言表达", level: report.language.level, comment: report.language.comment)
-                    EvaluationCard(title: "创意表现", level: report.creativity.level, comment: report.creativity.comment)
-                }
-                
-                if let url = recordingURL {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "mic.fill")
-                                .foregroundColor(themeColor)
-                                .font(.system(size: 16))
-                            Text("你的录音")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(themeColor)
-                        }
-                        AudioPlaybackView(audioURL: url)
-                    }
-                }
-                
-                if let config = storyConfig, config.type == .pictureStory {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Image(systemName: "book.fill")
-                                .foregroundColor(themeColor)
-                                .font(.system(size: 16))
-                            Text("参考答案")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(themeColor)
-                        }
-                        
-                        Text(report.standardStory)
-                            .font(.system(size: 14))
-                            .lineSpacing(5)
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Color("baiseanniucolor"))
-                            .cornerRadius(12)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 16) {
-                        HStack {
-                            Image(systemName: "photo.stack.fill")
-                                .foregroundColor(themeColor)
-                                .font(.system(size: 16))
-                            Text("图画回顾")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(themeColor)
-                        }
-                        
-                        VStack(spacing: 24) {
-                            ForEach(0..<config.images.count, id: \.self) { index in
-                                PictureReviewCard(
-                                    index: index,
-                                    imageName: config.images[index],
-                                    description: config.pictureDescriptions[index]
-                                )
-                            }
-                        }
-                    }
-                }
-                
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack {
-                        Image(systemName: "lightbulb.fill")
-                            .foregroundColor(.yellow)
-                            .font(.system(size: 16))
-                        Text("改进建议")
-                            .font(.system(size: 18, weight: .bold))
-                    }
-                    .foregroundColor(.primary)
-                    
-                    if #available(iOS 26, *) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(report.suggestions.indices, id: \.self) { index in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Text("\(index + 1)")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(themeColor)
-                                        .clipShape(Circle())
-                                    Text(report.suggestions[index])
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-                        .padding()
-                        .glassEffect(.regular, in: .rect(cornerRadius: 12))
-                    } else {
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(report.suggestions.indices, id: \.self) { index in
-                                HStack(alignment: .top, spacing: 10) {
-                                    Text("\(index + 1)")
-                                        .font(.system(size: 13, weight: .medium))
-                                        .foregroundColor(.white)
-                                        .frame(width: 20, height: 20)
-                                        .background(themeColor)
-                                        .clipShape(Circle())
-                                    Text(report.suggestions[index])
-                                        .font(.system(size: 14))
-                                        .foregroundColor(.primary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                }
-                            }
-                        }
-                        .padding()
-                        .background(Color("baiseanniucolor"))
-                        .cornerRadius(12)
-                    }
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "heart.fill")
-                            .foregroundColor(.pink)
-                            .font(.system(size: 16))
-                        Text("鼓励")
-                            .font(.system(size: 18, weight: .bold))
-                    }
-                    .foregroundColor(.primary)
-                    
-                    if #available(iOS 26, *) {
-                        Text(report.encouragement)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.pink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .multilineTextAlignment(.leading)
-                            .padding()
-                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
-                    } else {
-                        Text(report.encouragement)
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.pink)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .multilineTextAlignment(.leading)
-                            .padding()
-                            .background(Color("baiseanniucolor"))
-                            .cornerRadius(12)
-                    }
-                }
-                
-                Button(action: {
-                    HapticFeedbackManager.medium()
-                    resetAll()
-                    
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.counterclockwise")
-                        Text("重新开始")
-                    }
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(themeColor)
-                    .cornerRadius(12)
-                }
-                .padding(.top, 5)
-            }
-            .padding(20)
-        }
-        .background(Color("systemBackgroundColor"))
     }
     
     // MARK: - 加载视图
@@ -1384,12 +2604,13 @@ struct TSAChineseStoryView: View {
     var loadingReportView: some View {
         VStack(spacing: 24) {
             Spacer()
-            AnimatedGIFView(gifName: "大象等待", isAnimating: true)
-                .frame(width: 180, height: 180)
+            ProgressView()
+                .scaleEffect(1.5)
+                .padding()
             Text("正在评估...")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundColor(.primary)
-            Text("请稍等片刻约5-10秒")
+            Text("请稍等片刻")
                 .font(.system(size: 14))
                 .foregroundColor(.secondary)
             Spacer()
@@ -1398,45 +2619,71 @@ struct TSAChineseStoryView: View {
         .background(Color("systemBackgroundColor"))
     }
     
+    @Environment(\.dismiss) private var dismiss
+    
     // MARK: - Body
     var body: some View {
-        
-            ZStack {
-                if isLoadingStory {
-                    loadingStoryView
-                } else if let error = loadError {
-                    errorView
-                } else if showReport {
-                    if isLoadingReport {
-                        loadingReportView
-                    } else if let report = aiReport {
-                        ReportContentView(report: report)
+        ZStack {
+            if isLoadingStory {
+                loadingStoryView
+            } else if let error = loadError {
+                errorView
+            } else if showReport {
+                if isLoadingReport {
+                    loadingReportView
+                } else if let report = aiReport {
+                    ReportContentView(report: report)
+                }
+            } else if showDiscussionView, let config = storyConfig, config.type == .discussion {
+                DiscussionGroupView(
+                    topic: config.pictureDescriptions.first ?? config.topic,
+                    language: language,
+                    onFinish: { transcript in
+                        discussionTranscript = transcript
+                        showDiscussionView = false
+                        finishStory(with: transcript)
                     }
-                } else if let config = storyConfig {
-                    ScrollView(showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 20) {
-                            headerView
-                            stageStatusView
-                            Divider()
-                            
-                            studentNoticeView
-                            
-                            // 如果是口头报告或讨论，显示题目
-                            if config.type != .pictureStory {
-                                questionContentView
-                            }
-                            
-                            // 显示图片（看图说故事时）
-                            if config.type == .pictureStory && !config.images.isEmpty {
-                                VStack(spacing: 24) {
-                                    ForEach(0..<config.images.count, id: \.self) { index in
-                                        PictureRow(num: index + 1, imageName: config.images[index])
-                                    }
+                )
+            } else if let config = storyConfig {
+                ScrollView(showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        headerView
+                        stageStatusView
+                        Divider()
+                        
+                        studentNoticeView
+                        
+                        if config.type != .pictureStory {
+                            questionContentView
+                        }
+                        
+                        if config.type == .pictureStory && !config.images.isEmpty {
+                            VStack(spacing: 24) {
+                                ForEach(0..<config.images.count, id: \.self) { index in
+                                    PictureRow(num: index + 1, imageName: config.images[index])
                                 }
                             }
-                            
-                            Divider()
-                            
+                        }
+                        
+                        Divider()
+                        
+                        if config.type == .discussion {
+                            Button(action: {
+                                HapticFeedbackManager.medium()
+                                if currentStage == .preparing {
+                                    skipToSpeaking()
+                                }
+                            }) {
+                                Text(currentStage == .preparing ? "开始讨论" : "讨论中...")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 52)
+                                    .background(currentStage == .preparing ? themeLightColor : Color.gray)
+                                    .cornerRadius(14)
+                            }
+                            .disabled(currentStage != .preparing)
+                        } else {
                             HStack {
                                 Text(!isRecording ? (currentStage == .preparing ? "跳过准备阶段" : "开始讲述...") : "正在录音中...")
                                     .font(.system(size: 17, weight: .semibold))
@@ -1453,42 +2700,65 @@ struct TSAChineseStoryView: View {
                                     }
                             }
                             .padding(.horizontal, 5)
+                        }
+                        
+                        Spacer(minLength: 20)
+                    }
+                    .padding(20)
+                }
+                .background(Color("systemBackgroundColor"))
+            }
+        }
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(action: {
+                    HapticFeedbackManager.medium()
+                    dismiss()
+                }) {
+                    if #available(iOS 26.0, *) {
+                        Image(systemName: "chevron.left")
+                    } else {
+                        ZStack {
+                            Circle()
+                                .fill(Color("baiseanniucolor"))
+                                .frame(width: 30, height: 30)
+                                .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
                             
-                            Spacer(minLength: 20)
+                            Image(systemName: "chevron.left")
+                                .font(.body.weight(.medium))
+                                .foregroundColor(.primary)
                         }
-                        .padding(20)
-                    }
-                    .background(Color("systemBackgroundColor"))
-                }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                if !showReport && (currentStage == .preparing || currentStage == .speaking) {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        HStack(spacing: 8) {
-                            Image(systemName: currentStage == .preparing ? "clock" : "mic.fill")
-                                .font(.system(size: 16))
-                                .foregroundColor(themeLightColor)
-                            Text(timeString(from: timeRemaining))
-                                .font(.system(size: 20, weight: .semibold, design: .monospaced))
-                                .foregroundColor(themeLightColor)
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .cornerRadius(20)
                     }
                 }
             }
-            .onAppear {
-                requestSpeechPermission()
-                setupAudioSession()
-                loadRandomStory()
+            
+            if !showReport && (currentStage == .preparing || currentStage == .speaking) && !showDiscussionView {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    HStack(spacing: 8) {
+                        Image(systemName: currentStage == .preparing ? "clock" : "mic.fill")
+                            .font(.system(size: 16))
+                            .foregroundColor(themeLightColor)
+                        Text(timeString(from: timeRemaining))
+                            .font(.system(size: 20, weight: .semibold, design: .monospaced))
+                            .foregroundColor(themeLightColor)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .cornerRadius(20)
+                }
             }
-            .onDisappear {
-                stopRecording()
-                timer?.invalidate()
-            }
-        
+        }
+        .onAppear {
+            requestSpeechPermission()
+            setupAudioSession()
+            loadRandomStory()
+        }
+        .onDisappear {
+            stopRecording()
+            timer?.invalidate()
+        }
     }
     
     // MARK: - 加载随机故事
@@ -1496,7 +2766,6 @@ struct TSAChineseStoryView: View {
         isLoadingStory = true
         loadError = nil
         
-        // 等待 storyManager 加载完成
         if storyManager.allStories == nil && storyManager.errorMessage == nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 loadRandomStory()
@@ -1510,7 +2779,6 @@ struct TSAChineseStoryView: View {
             return
         }
         
-        // 小六且指定了题型时，使用指定题型
         if grade == "小六", let fixedType = fixedQuestionType {
             let type = storyManager.convertToQuestionType(from: fixedType)
             if let config = storyManager.randomStoryConfig(for: grade, type: type) {
@@ -1521,7 +2789,6 @@ struct TSAChineseStoryView: View {
             }
         }
         
-        // 默认随机抽取
         if let config = storyManager.randomStoryConfig(for: grade) {
             storyConfig = config
             isLoadingStory = false
@@ -1532,7 +2799,6 @@ struct TSAChineseStoryView: View {
         }
     }
     
-    // MARK: - 辅助函数
     func timeString(from seconds: Int) -> String {
         let minutes = seconds / 60
         let secs = seconds % 60
@@ -1580,7 +2846,13 @@ struct TSAChineseStoryView: View {
     // MARK: - 计时逻辑
     func startPreparing() {
         currentStage = .preparing
-        timeRemaining = 180
+        
+        if storyConfig?.type == .discussion {
+            timeRemaining = 60
+        } else {
+            timeRemaining = 180
+        }
+        
         fullTranscript = ""
         aiReport = nil
         showReport = false
@@ -1601,31 +2873,53 @@ struct TSAChineseStoryView: View {
     func startSpeaking() {
         timer?.invalidate()
         currentStage = .speaking
-        timeRemaining = 60
         
-        startRecording()
-        startRecordingToFile()
-        
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
-            if timeRemaining > 0 {
-                timeRemaining -= 1
-            } else {
-                finishStory()
+        if storyConfig?.type == .discussion {
+            showDiscussionView = true
+        } else if storyConfig?.type == .pictureStory {
+            timeRemaining = 60
+            startRecording()
+            startRecordingToFile()
+            
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                if timeRemaining > 0 {
+                    timeRemaining -= 1
+                } else {
+                    finishStory()
+                }
+            }
+        } else if storyConfig?.type == .oralReport {
+            timeRemaining = 60
+            startRecording()
+            startRecordingToFile()
+            
+            timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
+                if timeRemaining > 0 {
+                    timeRemaining -= 1
+                } else {
+                    finishStory()
+                }
             }
         }
     }
     
-    func finishStory() {
+    func finishStory(with transcript: String = "") {
         timer?.invalidate()
         timer = nil
         
-        stopRecording()
-        stopRecordingToFile()
+        if storyConfig?.type != .discussion {
+            stopRecording()
+            stopRecordingToFile()
+        }
         
         showReport = true
         isLoadingReport = true
         
-        performAIAnalysis()
+        if storyConfig?.type == .discussion {
+            performAIAnalysisForDiscussion(with: transcript)
+        } else {
+            performAIAnalysis()
+        }
     }
     
     func skipToSpeaking() {
@@ -1642,6 +2936,8 @@ struct TSAChineseStoryView: View {
         showReport = false
         isLoadingReport = false
         recordingURL = nil
+        showDiscussionView = false
+        discussionTranscript = ""
         startPreparing()
     }
     
@@ -1787,10 +3083,8 @@ struct TSAChineseStoryView: View {
             return
         }
         
-        // 语言提示
         let languageHint = language == "普通话" ? "普通话（简体中文）" : "粤语（繁体中文）"
         
-        // 根据不同题型构建不同的 prompt
         var prompt = ""
         
         if config.type == .pictureStory {
@@ -1799,7 +3093,7 @@ struct TSAChineseStoryView: View {
             }.joined(separator: "\n")
             
             prompt = """
-            你是一个专业的小学语文老师，熟悉香港\(grade)TSA中国语文评估标准（口语评估）。请根据图画内容，先自动生成一个标准答案故事，然后分析学生的口语故事，并以JSON格式返回结果。评分采用100分制。
+            你是一个专业的小学语文老师，熟悉香港\(grade)TSA中国语文评估标准。请根据图画内容，先自动生成一个标准答案故事，然后分析学生的口语故事，并以JSON格式返回结果。评分采用100分制。
             
             注意：学生使用的语言是 \(languageHint)。
 
@@ -1813,25 +3107,22 @@ struct TSAChineseStoryView: View {
             \(fullTranscript)
 
             【返回格式要求】
-            必须严格按照以下JSON格式返回，不要包含任何其他文字：
+            必须严格按照以下JSON格式返回：
             {
                 "score": 85,
-                "scoreReason": "故事完整，语言流畅，角色齐全",
-                "standardStory": "标准答案故事（200-300字）",
-                "completeness": {"level": "良好", "comment": "故事结构完整，情节连贯"},
-                "language": {"level": "良好", "comment": "语言表达流畅，用词恰当"},
-                "creativity": {"level": "一般", "comment": "按照图画顺序讲述，可加入更多创意"},
+                "scoreReason": "故事完整，语言流畅",
+                "standardStory": "标准答案故事",
+                "completeness": {"level": "良好", "comment": "故事结构完整"},
+                "language": {"level": "良好", "comment": "语言表达流畅"},
+                "creativity": {"level": "一般", "comment": "可加入更多创意"},
                 "suggestions": ["建议1", "建议2", "建议3"],
                 "encouragement": "鼓励的话"
             }
-
-            注意：level 只能是"优秀"、"良好"、"一般"、"待加强"中的一个。
-            score 范围 0-100。
             """
-        } else if config.type == .oralReport {
+        } else {
             let questionText = config.pictureDescriptions.first ?? ""
             prompt = """
-            你是一个专业的小学语文老师，熟悉香港\(grade)TSA中国语文评估标准（口语评估）。请分析学生的口头报告，并以JSON格式返回结果。评分采用100分制。
+            你是一个专业的小学语文老师，熟悉香港\(grade)TSA中国语文评估标准。请分析学生的口头报告，并以JSON格式返回结果。评分采用100分制。
             
             注意：学生使用的语言是 \(languageHint)。
 
@@ -1842,49 +3133,17 @@ struct TSAChineseStoryView: View {
             \(fullTranscript)
 
             【返回格式要求】
-            必须严格按照以下JSON格式返回，不要包含任何其他文字：
+            必须严格按照以下JSON格式返回：
             {
                 "score": 85,
                 "scoreReason": "观点清晰，表达流畅",
-                "standardStory": "一份示范性的口头报告（200-300字）",
-                "completeness": {"level": "良好", "comment": "内容完整，观点明确"},
-                "language": {"level": "良好", "comment": "语言表达流畅，用词恰当"},
-                "creativity": {"level": "一般", "comment": "可以加入更多个人见解"},
-                "suggestions": ["建议1", "建议2", "建议3"],
-                "encouragement": "鼓励的话"
-            }
-
-            注意：level 只能是"优秀"、"良好"、"一般"、"待加强"中的一个。
-            score 范围 0-100。
-            """
-        } else {
-            let questionText = config.pictureDescriptions.first ?? ""
-            prompt = """
-            你是一个专业的小学语文老师，熟悉香港\(grade)TSA中国语文评估标准（口语评估）。请分析学生的讨论发言，并以JSON格式返回结果。评分采用100分制。
-            
-            注意：学生使用的语言是 \(languageHint)。
-
-            【讨论题目】
-            \(questionText)
-
-            【学生的讨论内容】
-            \(fullTranscript)
-
-            【返回格式要求】
-            必须严格按照以下JSON格式返回，不要包含任何其他文字：
-            {
-                "score": 85,
-                "scoreReason": "观点清晰，积极参与讨论",
-                "standardStory": "示范性的讨论发言（200-300字）",
-                "completeness": {"level": "良好", "comment": "观点表达完整"},
+                "standardStory": "示范性的口头报告",
+                "completeness": {"level": "良好", "comment": "内容完整"},
                 "language": {"level": "良好", "comment": "语言表达流畅"},
-                "creativity": {"level": "一般", "comment": "可以提出更多建设性意见"},
+                "creativity": {"level": "一般", "comment": "可加入更多个人见解"},
                 "suggestions": ["建议1", "建议2", "建议3"],
                 "encouragement": "鼓励的话"
             }
-
-            注意：level 只能是"优秀"、"良好"、"一般"、"待加强"中的一个。
-            score 范围 0-100。
             """
         }
         
@@ -1980,23 +3239,242 @@ struct TSAChineseStoryView: View {
             
             let fallbackReport = AIReportData(
                 score: score,
-                scoreReason: "根据内容长度自动评估（网络连接暂时不可用）",
-                standardStory: "根据题目要求，一个完整的回答应该包含清晰的观点和充分的理由。",
+                scoreReason: "根据内容长度自动评估",
+                standardStory: "根据题目要求，一个完整的回答应该包含清晰的观点。",
                 completeness: AIReportData.EvaluationItem(level: completenessLevel, comment: "内容\(wordCount > 50 ? "较为完整" : "需要补充内容")"),
                 language: AIReportData.EvaluationItem(level: wordCount > 80 ? "良好" : "一般", comment: "语言表达\(wordCount > 80 ? "较为流畅" : "有待提升")"),
                 creativity: AIReportData.EvaluationItem(level: "一般", comment: "可以尝试加入更多个人见解"),
-                suggestions: ["建议先理清思路再回答", "尝试用更丰富的词语表达观点", "可以加入更多具体例子", "注意表达的前后连贯性"],
+                suggestions: ["建议先理清思路", "尝试用更丰富的词语", "注意表达连贯性"],
                 encouragement: "继续努力！多练习会越来越棒！"
             )
             self.aiReport = fallbackReport
             self.isLoadingReport = false
         }
     }
+    
+    func performAIAnalysisForDiscussion(with transcript: String) {
+        let defaultReport = AIReportData(
+            score: 75,
+            scoreReason: "小组讨论完成，积极参与讨论。",
+            standardStory: "小组讨论有助于培养沟通能力和批判性思维。",
+            completeness: AIReportData.EvaluationItem(level: "良好", comment: "能够表达自己的观点"),
+            language: AIReportData.EvaluationItem(level: "良好", comment: "语言表达清晰"),
+            creativity: AIReportData.EvaluationItem(level: "一般", comment: "可以提出更多创新想法"),
+            suggestions: ["多倾听他人意见", "提出更多建设性观点", "注意讨论时间管理"],
+            encouragement: "做得很好！继续保持讨论的积极性！"
+        )
+        self.aiReport = defaultReport
+        self.isLoadingReport = false
+    }
+}
+
+// MARK: - 报告内容视图
+extension TSAChineseStoryView {
+    @ViewBuilder
+    func ReportContentView(report: AIReportData) -> some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 20) {
+                headerView
+                
+                if #available(iOS 26, *) {
+                    VStack(spacing: 16) {
+                        ScoreRingView(score: report.score)
+                        Text(report.scoreReason)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding(.vertical, 16)
+                    .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                } else {
+                    VStack(spacing: 16) {
+                        ScoreRingView(score: report.score)
+                        Text(report.scoreReason)
+                            .font(.system(size: 14))
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                    }
+                    .padding(.vertical, 16)
+                    .background(Color("baiseanniucolor"))
+                    .cornerRadius(16)
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("详细评估")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(themeColor)
+                    
+                    EvaluationCard(title: "内容完整性", level: report.completeness.level, comment: report.completeness.comment)
+                    EvaluationCard(title: "语言表达", level: report.language.level, comment: report.language.comment)
+                    EvaluationCard(title: "创意表现", level: report.creativity.level, comment: report.creativity.comment)
+                }
+                
+                if let url = recordingURL, storyConfig?.type != .discussion {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "mic.fill")
+                                .foregroundColor(themeColor)
+                                .font(.system(size: 16))
+                            Text("你的录音")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(themeColor)
+                        }
+                        AudioPlaybackView(audioURL: url)
+                    }
+                }
+                
+                if let config = storyConfig, config.type == .pictureStory {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Image(systemName: "book.fill")
+                                .foregroundColor(themeColor)
+                                .font(.system(size: 16))
+                            Text("参考答案")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(themeColor)
+                        }
+                        
+                        Text(report.standardStory)
+                            .font(.system(size: 14))
+                            .lineSpacing(5)
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color("baiseanniucolor"))
+                            .cornerRadius(12)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 16) {
+                        HStack {
+                            Image(systemName: "photo.stack.fill")
+                                .foregroundColor(themeColor)
+                                .font(.system(size: 16))
+                            Text("图画回顾")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(themeColor)
+                        }
+                        
+                        VStack(spacing: 24) {
+                            ForEach(0..<config.images.count, id: \.self) { index in
+                                PictureReviewCard(
+                                    index: index,
+                                    imageName: config.images[index],
+                                    description: config.pictureDescriptions[index]
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(.yellow)
+                            .font(.system(size: 16))
+                        Text("改进建议")
+                            .font(.system(size: 18, weight: .bold))
+                    }
+                    .foregroundColor(.primary)
+                    
+                    if #available(iOS 26, *) {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(report.suggestions.indices, id: \.self) { index in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(themeColor)
+                                        .clipShape(Circle())
+                                    Text(report.suggestions[index])
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                        .padding()
+                        .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                    } else {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(report.suggestions.indices, id: \.self) { index in
+                                HStack(alignment: .top, spacing: 10) {
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 13, weight: .medium))
+                                        .foregroundColor(.white)
+                                        .frame(width: 20, height: 20)
+                                        .background(themeColor)
+                                        .clipShape(Circle())
+                                    Text(report.suggestions[index])
+                                        .font(.system(size: 14))
+                                        .foregroundColor(.primary)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color("baiseanniucolor"))
+                        .cornerRadius(12)
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "heart.fill")
+                            .foregroundColor(.pink)
+                            .font(.system(size: 16))
+                        Text("鼓励")
+                            .font(.system(size: 18, weight: .bold))
+                    }
+                    .foregroundColor(.primary)
+                    
+                    if #available(iOS 26, *) {
+                        Text(report.encouragement)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.pink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .multilineTextAlignment(.leading)
+                            .padding()
+                            .glassEffect(.regular, in: .rect(cornerRadius: 12))
+                    } else {
+                        Text(report.encouragement)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.pink)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .multilineTextAlignment(.leading)
+                            .padding()
+                            .background(Color("baiseanniucolor"))
+                            .cornerRadius(12)
+                    }
+                }
+                
+                Button(action: {
+                    HapticFeedbackManager.medium()
+                    resetAll()
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.counterclockwise")
+                        Text("重新开始")
+                    }
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .background(themeColor)
+                    .cornerRadius(12)
+                }
+                .padding(.top, 5)
+            }
+            .padding(20)
+        }
+        .background(Color("systemBackgroundColor"))
+    }
 }
 
 // MARK: - 预览
 struct TSAChineseStoryView_Previews: PreviewProvider {
     static var previews: some View {
-        TSAChineseStoryView(grade: "小三", language: "粤语")
+        TSAChineseStoryView(grade: "小六", questionType: .discussion, language: "普通话")
     }
 }

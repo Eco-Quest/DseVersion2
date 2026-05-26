@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 // MARK: - 懒加载包装器
 struct LazyView<Content: View>: View {
@@ -255,16 +256,31 @@ struct DSEPreparationView: View {
             }
         }
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(action: {
-                    dismiss()
-                }) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "chevron.left")
-                            .font(.body.weight(.medium))
-                    }
-                }
-            }
+            ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                HapticFeedbackManager.medium()
+                               
+                                dismiss()
+                            }) {
+                                if #available(iOS 26.0, *) {
+                                    Image(systemName: "chevron.left")
+                                        //.foregroundColor(Color("anniucolor"))
+                                }else{
+                                    ZStack {
+                                        // 圓形白色背景
+                                        Circle()
+                                            .fill(Color("baiseanniucolor"))
+                                            .frame(width: 30, height: 30)
+                                            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                                        
+                                        Image(systemName: "chevron.left")
+                                            .font(.body.weight(.medium))
+                                            .foregroundColor(.primary)
+                                    }
+                                }
+                            }
+                        }
+            
             
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: {
@@ -275,8 +291,10 @@ struct DSEPreparationView: View {
                     HStack(spacing: 6) {
                         Image(systemName: showNoteEditor ? "note.text.badge.xmark" : "pencil")
                             .font(.system(size: 18, weight: .medium))
+                            .foregroundColor(Color("blackorwhitecolor"))
                         Text(showNoteEditor ? "关闭稿纸" : "稿纸")
                             .font(.system(size: 16, weight: .medium))
+                            .foregroundColor(Color("blackorwhitecolor"))
                     }
                 }
             }

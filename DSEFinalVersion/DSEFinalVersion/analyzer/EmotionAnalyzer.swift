@@ -57,7 +57,7 @@ final class EmotionAnalyzer {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
         guard let image = Self.uiImage(from: ciImage) else { return }
-        let rotated = image.rotate(radians: Self.rotationRadians)
+        let rotated = image.rotate1(radians: Self.rotationRadians)
         ingest(image: rotated)
     }
     
@@ -65,8 +65,8 @@ final class EmotionAnalyzer {
     
     private func predictEmotion(images: UIImage) {
         guard let buffer = images
-            .resize(size: Self.modelInputSize)?
-            .getCVPixelBuffer() else {
+            .resize1(size: Self.modelInputSize)?
+            .getCVPixelBuffer1() else {
             return
         }
         
@@ -124,7 +124,7 @@ final class EmotionAnalyzer {
 // MARK: - UIImage（參考 completedemotion.swift）
 
 extension UIImage {
-    func rotate(radians: CGFloat) -> UIImage {
+    func rotate1(radians: CGFloat) -> UIImage {
         let rotatedSize = CGRect(origin: .zero, size: size)
             .applying(CGAffineTransform(rotationAngle: radians))
             .integral.size
@@ -145,14 +145,14 @@ extension UIImage {
         return UIGraphicsGetImageFromCurrentImageContext() ?? self
     }
     
-    func resize(size: CGSize) -> UIImage? {
+    func resize1(size: CGSize) -> UIImage? {
         UIGraphicsBeginImageContextWithOptions(size, false, 1.0)
         defer { UIGraphicsEndImageContext() }
         draw(in: CGRect(origin: .zero, size: size))
         return UIGraphicsGetImageFromCurrentImageContext()
     }
     
-    func getCVPixelBuffer() -> CVPixelBuffer? {
+    func getCVPixelBuffer1() -> CVPixelBuffer? {
         let width = Int(size.width)
         let height = Int(size.height)
         

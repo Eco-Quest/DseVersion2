@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 
 // MARK: - 数据模型
 
@@ -132,6 +133,32 @@ class QuestionManager: ObservableObject {
         } else {
             filteredPapers = allPapers
         }
+    }
+}
+
+// MARK: - 导航路径枚举
+enum DSENavigationDestination: Hashable {
+    case dsePreparation(candidates: [DSECandidate], paper: Paper)
+}
+
+// 为了让 Paper 和 DSECandidate 支持 Hashable
+extension Paper: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: Paper, rhs: Paper) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
+extension DSECandidate: Hashable {
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: DSECandidate, rhs: DSECandidate) -> Bool {
+        lhs.id == rhs.id
     }
 }
 
@@ -418,11 +445,7 @@ struct CandidateLevelCard: View {
             .padding(.vertical, 0)
             .glassEffect(.regular, in: .rect(cornerRadius: 16))
             
-          
-            
-            
-            
-        }else{
+        } else {
             HStack(alignment: .center, spacing: 16) {
                 // 左侧：头像 + 名称 + 星级 + 描述
                 VStack(alignment: .leading, spacing: 8) {
@@ -482,15 +505,7 @@ struct CandidateLevelCard: View {
             .background(cardBackgroundColor)
             .cornerRadius(16)
             .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
-            
-            
         }
-        
-        
-   
-        
-        
-        
     }
 }
 
@@ -640,17 +655,12 @@ struct BookStylePaperCard: View {
             // 卡片背景
             if #available(iOS 26, *) {
                 Color.clear
-                 
                     .glassEffect(.regular,in: .rect(cornerRadius: 16))
-                   
-             
-            }else{
-                
+            } else {
                 RoundedRectangle(cornerRadius: 16)
                     .fill(Color("baiseanniucolor"))
                     .shadow(color: .black.opacity(0.06), radius: 6, x: 0, y: 2)
             }
-            
             
             // 选中效果
             if isSelected {
@@ -774,6 +784,7 @@ struct DSESettingView: View {
     @State private var selectedPaper: Paper? = nil
     @State private var selectedYear: String = ""
     @State private var selectedDetailPaper: Paper? = nil
+    @State private var navigationPath = NavigationPath()
     
     @State private var candidates: [DSECandidate] = [
         DSECandidate(letter: "A", name: "Parrot", iconName: "user1icon", description: "Chatty Parrot", level: 3),
@@ -790,7 +801,7 @@ struct DSESettingView: View {
     }
     
     var body: some View {
-       
+        NavigationStack(path: $navigationPath) {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     Image("dsebgimage")
@@ -801,7 +812,6 @@ struct DSESettingView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
                        
-                    
                     VStack(spacing: 24) {
                         // DSE 口语说明卡片
                         VStack(alignment: .leading, spacing: 12) {
@@ -944,30 +954,29 @@ struct DSESettingView: View {
                         
                         Spacer(minLength: 20)
                         
-                        // 开始练习按钮 - 使用 NavigationLink 进行导航跳转
+                        // 开始练习按钮
                         Group {
                             if let paper = selectedPaper {
-                                NavigationLink(destination: DSEPreparationView(candidates: candidates, paper: paper)) {
-                                    HStack {
-                                        Text("开始练习")
-                                            .font(.system(size: 17, weight: .semibold))
-                                    }
+                                Button(action: {
+                                    HapticFeedbackManager.medium()
+                                    navigateToPreparation(paper: paper)
+                                }) {
+                                    Text("开始练习")
+                                        .font(.system(size: 17, weight: .semibold))
+                                        .foregroundColor(.white)
+                                        .frame(maxWidth: .infinity)
+                                        .frame(height: 52)
+                                        .background(selectedPaperType.themeColor)
+                                        .cornerRadius(14)
+                                }
+                            } else {
+                                Text("开始练习")
+                                    .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 52)
-                                    .background(selectedPaperType.themeColor)
+                                    .background(Color.gray.opacity(0.5))
                                     .cornerRadius(14)
-                                }
-                            } else {
-                                HStack {
-                                    Text("开始练习")
-                                        .font(.system(size: 17, weight: .semibold))
-                                }
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 52)
-                                .background(Color.gray.opacity(0.5))
-                                .cornerRadius(14)
                             }
                         }
                         .padding(.horizontal, 20)
@@ -977,7 +986,34 @@ struct DSESettingView: View {
             }
             .background(Color("systemBackgroundColor"))
             .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        HapticFeedbackManager.medium()
+                        if !navigationPath.isEmpty {
+                            navigationPath.removeLast()
+                        } else {
+                            dismiss()
+                        }
+                    }) {
+                        if #available(iOS 26.0, *) {
+                            Image(systemName: "chevron.left")
+                        } else {
+                            ZStack {
+                                Circle()
+                                    .fill(Color("baiseanniucolor"))
+                                    .frame(width: 30, height: 30)
+                                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                                
+                                Image(systemName: "chevron.left")
+                                    .font(.body.weight(.medium))
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    }
+                }
+                
                 ToolbarItem(placement: .principal) {
                     Text("DSE英文口试")
                         .font(.system(size: 18, weight: .semibold))
@@ -996,12 +1032,24 @@ struct DSESettingView: View {
             .sheet(item: $selectedDetailPaper) { paper in
                 PaperDetailPopupView(paper: paper)
             }
+            .navigationDestination(for: DSENavigationDestination.self) { destination in
+                switch destination {
+                case .dsePreparation(let candidates, let paper):
+                    DSEPreparationView(candidates: candidates, paper: paper)
+                }
+            }
         }
+    }
     
+    @Environment(\.dismiss) private var dismiss
+    
+    // 导航方法
+    private func navigateToPreparation(paper: Paper) {
+        navigationPath.append(DSENavigationDestination.dsePreparation(candidates: candidates, paper: paper))
+    }
 }
 
 // MARK: - 练习模式说明视图
-// MARK: - 考生陪练程度说明视图
 // MARK: - 考生陪练程度说明视图
 struct DSEModeInfoView: View {
     @Environment(\.dismiss) private var dismiss
@@ -1065,8 +1113,6 @@ struct DSEModeInfoView: View {
                 }
                 .padding(.horizontal, 20)
                 
-    
-                
                 // 底部按钮
                 Button(action: {
                     dismiss()
@@ -1082,11 +1128,12 @@ struct DSEModeInfoView: View {
                 .padding(.horizontal, 24)
                 .padding(.bottom, 20)
             }
-            .presentationDetents([.height(500)])  // 改成固定高度
+            .presentationDetents([.height(500)])
             .presentationDragIndicator(.visible)
         }
     }
 }
+
 // MARK: - 预览
 #Preview {
     DSESettingView()

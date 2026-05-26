@@ -56,7 +56,7 @@ class DSEScoreCalculator {
             eyeContactPercentages: input.eyeContactPercentages
         )
         
-        // Vocabulary / Ideas 由 ReportService LLM 回填
+        // Vocabulary / Ideas 由 ReportService1 LLM 回填
         let vocabularyData = DSEVocabularyLanguagePatternsData()
         let ideasData = DSEIdeasOrganizationData()
         
@@ -103,7 +103,7 @@ class DSEScoreCalculator {
         var firstError: Error?
         
         group.enter()
-        ReportService.shared.generateVocabIdeasReport(
+        ReportService1.shared.generateVocabIdeasReport(
             from: messages,
             examText: examText,
             userSpeakingTurns: input.speakingTurns,
@@ -129,7 +129,7 @@ class DSEScoreCalculator {
         }
         
         group.enter()
-        ReportService.shared.generatePronunCommReport(
+        ReportService1.shared.generatePronunCommReport(
             pronunciationData: performance.pronunciationDelivery,
             communicationData: performance.communicationStrategies,
             messages: messages,
@@ -197,8 +197,8 @@ class DSEScoreCalculator {
         return p + c + v + i
     }
     
-    /** 
-    計算Pronunciation Delivery 分數 
+    /**
+    計算Pronunciation Delivery 分數
     分數由volume(avg_volume), intonation(sd_volume), fluency(sd_pace, avg_pace, fillers) 組成
     **/
     func calculatePronunciationDeliveryScore(
@@ -282,7 +282,7 @@ class DSEScoreCalculator {
         let fillerPenalty = fillerPenalty(
             filler_words_count: filler_words_count,
             speakingDurationSeconds: speakingDurationSeconds
-        )        
+        )
         return normalizedScore(baseScore * stabilityPenalty - fillerPenalty)
     }
 
@@ -326,8 +326,8 @@ class DSEScoreCalculator {
     
 
 
-    /** 
-    計算Communication Strategies 分數 
+    /**
+    計算Communication Strategies 分數
     分數由Eye Contact(eyeContactPercentages), Emotion(emotionPercentages), Speaking Turns(speakingTurns) 組成
     **/
     func calculateCommunicationStrategiesScore(

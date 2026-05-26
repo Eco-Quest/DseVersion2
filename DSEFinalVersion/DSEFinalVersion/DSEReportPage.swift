@@ -241,7 +241,7 @@ struct CustomVideoPlayer: UIViewControllerRepresentable {
 }
 
 // MARK: - 加载视图
-struct LoadingView: View {
+struct LoadingView111: View {
     var body: some View {
         ZStack {
             Color.black.opacity(0.7)
@@ -350,7 +350,7 @@ struct VideoControlBar: View {
         .padding(.vertical, 10)
         .background(
             LinearGradient(
-                gradient: Gradient(colors: [
+                gradient: SwiftUI.Gradient(colors: [
                     Color.black.opacity(0),
                     Color.black.opacity(0.7),
                     Color.black.opacity(0.9)
@@ -371,6 +371,7 @@ struct VideoControlBar: View {
     }
 }
 
+// MARK: - 声量变化趋势图表
 struct VolumeChartView: View {
     let volumePoints: [DSEVolumeSample]
     let volumeStabilityText: String
@@ -478,9 +479,7 @@ struct VolumeChartView: View {
                                 .font(.system(size: 8, weight: .medium))
                                 .foregroundColor(color)
                                 .background(
-                                    Color.white.opacity(0.8)
-                                        .padding(.horizontal, -2)
-                                        .padding(.vertical, -1)
+                                    .clear
                                 )
                                 .position(x: x, y: pointY - 12)
                             
@@ -542,6 +541,7 @@ struct VolumeChartView: View {
         return String(format: "%02d:%02d", minutes, secs)
     }
 }
+
 
 // MARK: - 语速仪表盘
 struct PaceSpeedometerView: View {
@@ -632,7 +632,7 @@ struct PaceSpeedometerView: View {
 
 // MARK: - 饼图形状
 // MARK: - 饼图形状
-struct PieSliceShape: Shape {
+struct PieSliceShape111: Shape {
     let startAngle: Double
     let endAngle: Double
     
@@ -744,7 +744,7 @@ struct EyeContactPieChartView: View {
                 ZStack {
                     if hasData {
                         ForEach(slices) { slice in
-                            PieSliceShape(startAngle: slice.startAngle, endAngle: slice.endAngle)
+                            PieSliceShape111(startAngle: slice.startAngle, endAngle: slice.endAngle)
                                 .fill(slice.color)
                         }
                         
@@ -766,7 +766,10 @@ struct EyeContactPieChartView: View {
                         // 无数据时显示灰色圆环
                         Circle()
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                            .fill(Color.gray.opacity(0.05))
+                            .background(
+                                Circle()
+                                    .fill(Color.gray.opacity(0.05))
+                            )
                     }
                     
                     Circle()
@@ -1407,11 +1410,11 @@ extension Array where Element == Double {
 // MARK: - View Extension
 extension View {
     func cornerRadius(_ radius: CGFloat, corners: UIRectCorner) -> some View {
-        clipShape(RoundedCorner(radius: radius, corners: corners))
+        clipShape(RoundedCorner111(radius: radius, corners: corners))
     }
 }
 
-struct RoundedCorner: Shape {
+struct RoundedCorner111: Shape {
     var radius: CGFloat = .infinity
     var corners: UIRectCorner = .allCorners
     
@@ -1517,7 +1520,7 @@ struct DSEReportPage: View {
                             
                            
                             if isLoading {
-                                LoadingView()
+                                LoadingView111()
                                     .frame(height: videoHeight)
                             }
                         }
@@ -1705,7 +1708,7 @@ struct DSEReportPage: View {
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(width: 120)
                 .padding(.trailing, 10)
-                .onChange(of: selectedSegment) { oldValue, newValue in
+                .onChange(of: selectedSegment) { _ in
                     handleSegmentChange()
                 }
                 .onAppear {
@@ -1988,7 +1991,6 @@ private let previewPerformance = DSEPerformance(
     volumePoints: [
         DSEVolumeSample(timestamp: 0, value: 48),
         DSEVolumeSample(timestamp: 5, value: 52)
-       
     ],
     emotionCounts: ["calm": 60, "joy": 20, "surprise": 10, "sad": 10],
     eyeContactCounts: ["center": 0, "left": 0, "right": 0, "lookAway": 0, "noFace": 0],

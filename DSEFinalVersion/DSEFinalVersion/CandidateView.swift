@@ -167,7 +167,7 @@ struct CandidateView: View {
                             .padding(.bottom, 8)
                     }
                     Text("\(candidate.name)")
-                        .font(.headline)
+                        .font(.system(size: 14))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(Color.black.opacity(0.7))
@@ -259,7 +259,7 @@ struct FuzhuContentView: View {
                     }
                 case .test:
                     LazyVStack {
-                        TestView(paper: paper)
+                        TestView1(paper: paper)
                     }
                 case .note:
                     LazyVStack {
@@ -309,7 +309,7 @@ struct FuzhuContentView_Previews: PreviewProvider {
 
 
 // MARK: - 试题视图
-struct TestView: View {
+struct TestView1: View {
     let paper: Paper?
     @Environment(\.dismiss) private var dismiss  // 如果需要关闭弹窗时可保留，否则可选
     let themeColor = Color(red: 0.39, green: 0.75, blue: 0.95) // 或者从外部传入
@@ -369,7 +369,7 @@ struct TestView: View {
                         .foregroundColor(.secondary)
                 }
                 .padding()
-                .background(Color.white)
+                .background(.clear)
                 .cornerRadius(12)
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
@@ -638,7 +638,7 @@ struct SegmentListView: View {
             }
             .fullScreenCover(isPresented: $showPlayer) {
                 if let segment = selectedSegment {
-                    VideoPlayerView(url: segment.url, title: "片段")
+                    VideoPlayerView1(url: segment.url, title: "片段")
                 }
             }
         }
@@ -698,7 +698,7 @@ struct SegmentRow: View {
 }
 
 // MARK: - 视频播放视图
-struct VideoPlayerView: View {
+struct VideoPlayerView1: View {
     let url: URL
     let title: String
     @Environment(\.dismiss) private var dismiss
@@ -762,7 +762,7 @@ struct VideoPlayerController: UIViewControllerRepresentable {
 }
 
 // MARK: - 麦克风音频处理
-class MicrophoneMonitor: ObservableObject {
+class MicrophoneMonitor1: ObservableObject {
     @Published var averageDb: Float = 0.0
     private var audioEngine: AVAudioEngine?
     private var inputNode: AVAudioInputNode?
@@ -819,9 +819,10 @@ class MicrophoneMonitor: ObservableObject {
     }
 }
 
-// MARK: - 音频波形视图
+import SwiftUI
+
 struct SoundChartView: View {
-    @ObservedObject var micMonitor: MicrophoneMonitor
+    @ObservedObject var micMonitor: MicrophoneMonitor1
     let isUserSpeaking: Bool
     
     var body: some View {
@@ -829,13 +830,14 @@ struct SoundChartView: View {
             HStack(spacing: 5) {
                 let barCount = max(Int(geometry.size.width / 12), 6)
                 
+                // ✅ 修复：ForEach 正确遍历 0..<barCount
                 ForEach(0..<barCount, id: \.self) { index in
                     let height = isUserSpeaking ? getBarHeight(index: index, total: barCount) : 6
                     
                     RoundedRectangle(cornerRadius: 2)
                         .fill(
                             LinearGradient(
-                                gradient: Gradient(colors: [Color(hex: "#63BEF3"), Color(hex: "#5C43A9")]),
+                                gradient: SwiftUI.Gradient(colors: [Color(hex: "#63BEF3"), Color(hex: "#5C43A9")]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -861,6 +863,8 @@ struct SoundChartView: View {
         return min(max(height, 6), 40)
     }
 }
+
+
 
 // MARK: - VideoRecorderViewModel
 class VideoRecorderViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate {
@@ -1371,6 +1375,9 @@ struct DiscussionTopic {
 }
 
 // MARK: - PCM Audio Player
+// MARK: - PCM Audio Player
+// MARK: - PCM Audio Player (iOS 16 兼容版)
+// MARK: - PCM Audio Player (修复版)
 class PCMAudioPlayer {
     private var audioEngine: AVAudioEngine?
     private var playerNode: AVAudioPlayerNode?
@@ -1378,55 +1385,68 @@ class PCMAudioPlayer {
     private var pendingBuffers = 0
     var onPlaybackFinished: (() -> Void)?
     var currentPlayingVoice: String?
-    
     init() {
         setupAudioEngine()
     }
-    
     private func setupAudioEngine() {
         audioEngine = AVAudioEngine()
         playerNode = AVAudioPlayerNode()
-        
         guard let audioEngine = audioEngine, let playerNode = playerNode else { return }
-        
-        audioFormat = AVAudioFormat(
-            commonFormat: .pcmFormatInt16,
+        // 关键修复 1：格式必须使用 pcmFormatFloat32 兼容 iOS 16.4，但采样率保持阿里云的 24000
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
             sampleRate: 24000,
             channels: 1,
             interleaved: false
-        )
-        
-        guard let format = audioFormat else { return }
-        
+        ) else {
+            print("Failed to create audio format")
+            return
+        }
+        audioFormat = format
         audioEngine.attach(playerNode)
         audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
         audioEngine.prepare()
-        
-        do { try audioEngine.start() } catch { print("Failed to start audio engine: \(error)") }
+        do {
+            try audioEngine.start()
+        } catch {
+            print("Failed to start audio engine: \(error)")
+        }
     }
-    
     func playPCMData(_ pcmData: Data, voice: String) {
         guard let playerNode = playerNode, let format = audioFormat else { return }
-        
         currentPlayingVoice = voice
         pendingBuffers += 1
-        
         if let audioEngine = audioEngine, !audioEngine.isRunning {
-            do { try audioEngine.start() } catch { return }
+            do {
+                try audioEngine.start()
+            } catch {
+                pendingBuffers -= 1
+                return
+            }
         }
-        
+        // 阿里云返回的是 24000Hz, 16bit(Int16), 单声道
         let frameCount = UInt32(pcmData.count / 2)
-        if frameCount == 0 { return }
-        
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else { return }
-        buffer.frameLength = frameCount
-        
-        let audioBuffer = buffer.audioBufferList.pointee.mBuffers
-        pcmData.withUnsafeBytes { bytes in
-            guard let baseAddress = bytes.baseAddress else { return }
-            audioBuffer.mData?.copyMemory(from: baseAddress, byteCount: pcmData.count)
+        if frameCount == 0 {
+            pendingBuffers -= 1
+            return
         }
-        
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            pendingBuffers -= 1
+            return
+        }
+        buffer.frameLength = frameCount
+        // 关键修复 2：将 Int16 PCM 数据归一化转换为 Float32 填充进 Buffer
+        pcmData.withUnsafeBytes { rawBufferPointer in
+            if let baseAddress = rawBufferPointer.baseAddress {
+                let int16Pointer = baseAddress.assumingMemoryBound(to: Int16.self)
+                if let floatChannelData = buffer.floatChannelData {
+                    for i in 0..<Int(frameCount) {
+                        // 将 Int16 (-32768~32767) 归一化为 Float32 (-1.0~1.0)
+                        floatChannelData[0][i] = Float(int16Pointer[i]) / Float(Int16.max)
+                    }
+                }
+            }
+        }
         playerNode.scheduleBuffer(buffer) { [weak self] in
             DispatchQueue.main.async {
                 self?.pendingBuffers -= 1
@@ -1435,10 +1455,10 @@ class PCMAudioPlayer {
                 }
             }
         }
-        
-        if !playerNode.isPlaying { playerNode.play() }
+        if !playerNode.isPlaying {
+            playerNode.play()
+        }
     }
-    
     func stop() {
         playerNode?.stop()
         playerNode?.reset()
@@ -1447,7 +1467,6 @@ class PCMAudioPlayer {
     }
 }
 
-// MARK: - WebSocket Manager
 // MARK: - WebSocket Manager
 @MainActor
 class WebSocketManager: NSObject, ObservableObject {
@@ -1869,32 +1888,12 @@ class WebSocketManager: NSObject, ObservableObject {
             """
         }
         
+        // 在 buildDynamicInstructions 的 instructions 末尾添加
         instructions += """
-        
-        YOUR BEHAVIOR AS \(participant.name.uppercased()):
-        
-        1. Be a NATURAL discussion partner:
-           - Start and respond directly with content.
-           - Respond to what others have said before adding your own views
-           - Use varied openings and closings.
-           
-        
-        2. When speaking:
-           - Acknowledge the other participant's point and avoid keep repeating it
-           - Share YOUR perspective based on your personality
-           - You may use examples from the exam material to support your point
-           - You MUST add at least one original idea, inference, or suggestion beyond the material content.
-        
-        3. Language level: \(participant.proficiencyLevel.rawValue)
-           - Adjust your vocabulary and sentence complexity accordingly
-           - \(participant.proficiencyLevel.style)
-
-
-        4. Keep your response CONCISE (30 seconds when spoken)
-        5. Use clear conversational English
-        6. Be encouraging and collaborative
-        
-        Remember: You are having a real discussion, not giving a speech.
+        CRITICAL RULE: 
+        - You are IN THE MIDDLE of an ongoing, continuous discussion. 
+        - NEVER use greetings like "Hello", "Hello again", "Hi", or "Good morning/afternoon" at the beginning of your turn. This is extremely unnatural in a flowing conversation.
+        - ALWAYS start by directly acknowledging the previous speaker's point (e.g., "I agree with...", "That's a good point, but...") or stating your point immediately.
         """
         return instructions
     }
@@ -1972,8 +1971,6 @@ class WebSocketManager: NSObject, ObservableObject {
             1. Respond to the previous reply.
             2. State the current focus task (\(focusTaskText)) before your response.
             3. Focus on Task \(focusTaskNumber) - (\(focusTaskText)) and add one NEW perspective/reason/example beyond the material.
-            4. NO greetings. Use varied openings and closings. It is STRICTLY FORBIDDEN to include "Hello" as your opener.
-
             """
         } else {
             prompt = """
@@ -2744,22 +2741,7 @@ extension WebSocketManager: AVAudioPlayerDelegate {
 
 
 
-// MARK: - 颜色扩展
-extension Color {
-    init(hex: String) {
-        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
-        var int: UInt64 = 0
-        Scanner(string: hex).scanHexInt64(&int)
-        let a, r, g, b: UInt64
-        switch hex.count {
-        case 3: (a, r, g, b) = (255, (int >> 8) * 17, (int >> 4 & 0xF) * 17, (int & 0xF) * 17)
-        case 6: (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
-        case 8: (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
-        default: (a, r, g, b) = (255, 0, 0, 0)
-        }
-        self.init(.sRGB, red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255, opacity: Double(a) / 255)
-    }
-}
+
 
 
 // 修改后的 PreviewWaveformView - 与 SoundChartView 排版完全相同
@@ -2778,7 +2760,7 @@ struct PreviewWaveformView: View {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(
                             LinearGradient(
-                                gradient: Gradient(colors: [Color(hex: "#63BEF3"), Color(hex: "#5C43A9")]),
+                                gradient: SwiftUI.Gradient(colors: [Color(hex: "#63BEF3"), Color(hex: "#5C43A9")]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -2840,7 +2822,7 @@ struct VideoCallView: View {
     // 改为可选类型，延迟初始化
     @State private var recorderVM: VideoRecorderViewModel?
     @State private var webSocketManager: WebSocketManager?
-    @State private var micMonitor: MicrophoneMonitor?
+    @State private var micMonitor: MicrophoneMonitor1?
     
     @State private var showPermissionAlert = false
     @State private var permissionAlertMessage = ""
@@ -2982,7 +2964,7 @@ struct VideoCallView: View {
         DispatchQueue.main.async {
             self.recorderVM = VideoRecorderViewModel()
             self.webSocketManager = WebSocketManager()
-            self.micMonitor = MicrophoneMonitor()
+            self.micMonitor = MicrophoneMonitor1()
             
             self.webSocketManager?.onUserStartSpeaking = {
                 DispatchQueue.main.async {
@@ -3598,7 +3580,7 @@ struct VideoCallView: View {
         }
         .fullScreenCover(isPresented: $showVideoPlayer) {
             if let url = mergedVideoURL {
-                VideoPlayerView(url: url, title: "合成视频")
+                VideoPlayerView1(url: url, title: "合成视频")
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSNotification.Name("DiscussionEnded"))) { _ in

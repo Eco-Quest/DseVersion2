@@ -57,7 +57,7 @@ enum TSAEnglishP6Type: String, CaseIterable {
     var description: String {
         switch self {
         case .readingInteraction:
-            return "第一部分：朗读短文 → 第二部分：师生互动问答"
+            return "朗读短文 + 师生互动问答"
         case .presentation:
             return "根据题目进行2分钟口头报告"
         }
@@ -71,12 +71,19 @@ enum TSAEnglishP6Type: String, CaseIterable {
     }
 }
 
+// MARK: - 导航路径枚举
+enum EnglishNavigationDestination: Hashable {
+    case englishPractice(grade: String, questionType: EnglishQuestionType)
+}
+
+
 // MARK: - 主视图
 struct TSAEnglishSettingView: View {
     @State private var selectedGrade: TSAEnglishGrade = .p3
     @State private var selectedP3Type: TSAEnglishP3Type = .readAloud
     @State private var selectedP6Type: TSAEnglishP6Type = .readingInteraction
-    
+    @State private var navigationPath = NavigationPath()
+    @Environment(\.dismiss) private var dismiss
     private let themeColor = Color(hex: "5C43A9")
     private let themeLightColor = Color("SelectionColor")
     
@@ -94,111 +101,171 @@ struct TSAEnglishSettingView: View {
     }
     
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(spacing: 0) {
-                // 顶部装饰图
-                Image("tsaxiaoliubg")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .cornerRadius(20)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 8)
-                
-                VStack(spacing: 18) {
-                    // 说明文字
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text(getDescriptionText())
-                            .font(.subheadline)
-                            .foregroundColor(Color("anniucolor"))
-                            .lineSpacing(4)
-                            .multilineTextAlignment(.leading)
-                            .opacity(0.6)
-                            .padding(EdgeInsets(top: 15, leading: 20, bottom: 0, trailing: 20))
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+        NavigationStack(path: $navigationPath) {
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    // 顶部装饰图
+                    Image("tsaxiaoliubg")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity)
+                        .cornerRadius(20)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
                     
-                    // 年级选择
-                    HStack {
-                        Text("学习阶段")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(Color("anniucolor"))
-                        Spacer()
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    ZStack {
-                        Rectangle()
-                            .fill(Color("baiseanniucolor"))
-                            .frame(height: 65)
-                            .cornerRadius(20)
+                    VStack(spacing: 18) {
+                        // 说明文字
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text(getDescriptionText())
+                                .font(.subheadline)
+                                .foregroundColor(Color("anniucolor"))
+                                .lineSpacing(4)
+                                .multilineTextAlignment(.leading)
+                                .opacity(0.6)
+                                .padding(EdgeInsets(top: 15, leading: 20, bottom: 0, trailing: 20))
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         
-                        HStack(spacing: 20) {
-                            ForEach(TSAEnglishGrade.allCases, id: \.self) { grade in
-                                Button(action: {
-                                    HapticFeedbackManager.medium()
-                                    selectedGrade = grade
-                                }) {
-                                    ZStack {
-                                        Rectangle()
-                                            .fill(selectedGrade == grade ? Color("SelectionColor") : Color("UnSelectionColor"))
-                                            .frame(height: 45)
-                                            .cornerRadius(112)
-                                        
-                                        Text(grade.displayName)
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(selectedGrade == grade ? Color("SelectionTextColor") : Color("UnSelectionTextColor"))
-                                    }
-                                    .frame(maxWidth: .infinity)
-                                }
-                                .buttonStyle(PlainButtonStyle())
-                            }
+                        // 年级选择
+                        HStack {
+                            Text("学习阶段")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(Color("anniucolor"))
+                            Spacer()
                         }
                         .padding(.horizontal, 20)
-                    }
-                    .padding(.horizontal, 20)
-                    
-                    // 小三题型
-                    if selectedGrade == .p3 {
-                        p3TypeSelector
-                    }
-                    
-                    // 小六题型
-                    if selectedGrade == .p6 {
-                        p6TypeSelector
-                    }
-                    
-                    // 开始按钮
-                    NavigationLink(destination:
-                                    
-                                    getDestinationView()
-                        .onAppear{
-                            HapticFeedbackManager.medium()
+                        
+                        ZStack {
+                            Rectangle()
+                                .fill(Color("baiseanniucolor"))
+                                .frame(height: 65)
+                                .cornerRadius(20)
+                            
+                            HStack(spacing: 20) {
+                                ForEach(TSAEnglishGrade.allCases, id: \.self) { grade in
+                                    Button(action: {
+                                        HapticFeedbackManager.medium()
+                                        withAnimation(.easeInOut(duration: 0.2)) {
+                                            selectedGrade = grade
+                                        }
+                                    }) {
+                                        ZStack {
+                                            Rectangle()
+                                                .fill(selectedGrade == grade ? Color("SelectionColor") : Color("UnSelectionColor"))
+                                                .frame(height: 45)
+                                                .cornerRadius(112)
+                                            
+                                            Text(grade.displayName)
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(selectedGrade == grade ? Color("SelectionTextColor") : Color("UnSelectionTextColor"))
+                                        }
+                                        .frame(maxWidth: .infinity)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                            }
+                            .padding(.horizontal, 20)
                         }
-                    
-                    ) {
-                        Text("开始练习")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(themeColor)
-                            .cornerRadius(20)
+                        .padding(.horizontal, 20)
+                        
+                        // 小三题型
+                        if selectedGrade == .p3 {
+                            p3TypeSelector
+                        }
+                        
+                        // 小六题型
+                        if selectedGrade == .p6 {
+                            p6TypeSelector
+                        }
+                        
+                        // 开始按钮
+                        Button(action: {
+                            HapticFeedbackManager.medium()
+                            navigateToPracticeView()
+                        }) {
+                            Text("开始练习")
+                                .font(.system(size: 17, weight: .semibold))
+                                .foregroundColor(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(themeColor)
+                                .cornerRadius(20)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.bottom, 30)
+                        .padding(.top, 10)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 30)
-                    .padding(.top, 10)
+                }
+            }
+            .background(Color("systemBackgroundColor"))
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        HapticFeedbackManager.medium()
+                        if !navigationPath.isEmpty {
+                            navigationPath.removeLast()
+                        } else {
+                            dismiss()
+                        }
+                    }) {
+                        if #available(iOS 26.0, *) {
+                            Image(systemName: "chevron.left")
+                        } else {
+                            ZStack {
+                                Circle()
+                                    .fill(Color("baiseanniucolor"))
+                                    .frame(width: 30, height: 30)
+                                    .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+                                
+                                Image(systemName: "chevron.left")
+                                    .font(.body.weight(.medium))
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    }
+                }
+                
+                ToolbarItem(placement: .principal) {
+                    Text("TSA英文口试")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.primary)
+                }
+            }
+            .animation(.easeInOut(duration: 0.3), value: selectedGrade)
+            .navigationDestination(for: EnglishNavigationDestination.self) { destination in
+                switch destination {
+                case .englishPractice(let grade, let questionType):
+                    switch questionType {
+                    case .readAloud:
+                        TSAEnglishPracticeView(grade: grade, questionType: .readAloud)
+                    case .pictureAnswer:
+                        TSAEnglishPracticeView(grade: grade, questionType: .pictureAnswer)
+                    case .readingInteraction:
+                        TSAEnglishPracticeView(grade: grade, questionType: .readingInteraction)
+                    case .presentation:
+                        TSAEnglishPracticeView(grade: grade, questionType: .presentation)
+                    }
                 }
             }
         }
-        .background(Color("systemBackgroundColor"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .principal) {
-                Text("TSA英文口试")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.primary)
-            }
+    }
+    
+    // MARK: - 导航方法
+    private func navigateToPracticeView() {
+        if selectedGrade == .p3 {
+            let questionType: EnglishQuestionType = selectedP3Type == .readAloud ? .readAloud : .pictureAnswer
+            navigationPath.append(EnglishNavigationDestination.englishPractice(
+                grade: "小三",
+                questionType: questionType
+            ))
+        } else {
+            let questionType: EnglishQuestionType = selectedP6Type == .readingInteraction ? .readingInteraction : .presentation
+            navigationPath.append(EnglishNavigationDestination.englishPractice(
+                grade: "小六",
+                questionType: questionType
+            ))
         }
     }
     
@@ -218,7 +285,9 @@ struct TSAEnglishSettingView: View {
                 ForEach(TSAEnglishP3Type.allCases, id: \.self) { type in
                     Button(action: {
                         HapticFeedbackManager.medium()
-                        selectedP3Type = type
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedP3Type = type
+                        }
                     }) {
                         HStack(spacing: 15) {
                             ZStack {
@@ -265,6 +334,7 @@ struct TSAEnglishSettingView: View {
             .padding(.horizontal, 20)
         }
         .padding(.top, 5)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
     
     // MARK: - 小六题型选择器
@@ -283,7 +353,9 @@ struct TSAEnglishSettingView: View {
                 ForEach(TSAEnglishP6Type.allCases, id: \.self) { type in
                     Button(action: {
                         HapticFeedbackManager.medium()
-                        selectedP6Type = type
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedP6Type = type
+                        }
                     }) {
                         HStack(spacing: 15) {
                             ZStack {
@@ -330,6 +402,7 @@ struct TSAEnglishSettingView: View {
             .padding(.horizontal, 20)
         }
         .padding(.top, 5)
+        .transition(.opacity.combined(with: .move(edge: .top)))
     }
     
     // MARK: - 说明文字
@@ -348,32 +421,6 @@ struct TSAEnglishSettingView: View {
             case .presentation:
                 return "TSA英文口试（小六）- 根据指定题目进行口头报告，清晰流畅表达观点。（准备3分钟，作答2分钟）"
             }
-        }
-    }
-    
-    // MARK: - 跳转目标
-    @ViewBuilder
-    private func getDestinationView() -> some View {
-        if selectedGrade == .p3 {
-            if selectedP3Type == .readAloud {
-                TSAEnglishPracticeView(grade: "小三", questionType: .readAloud)
-            } else {
-                TSAEnglishPracticeView(grade: "小三", questionType: .pictureAnswer)
-            }
-        } else {
-            if selectedP6Type == .readingInteraction {
-                TSAEnglishPracticeView(grade: "小六", questionType: .readingInteraction)
-            } else {
-                TSAEnglishPracticeView(grade: "小六", questionType: .presentation)
-            }
-        }
-    }
-    
-    private func getTypeName() -> String {
-        if selectedGrade == .p3 {
-            return selectedP3Type.displayName
-        } else {
-            return selectedP6Type.displayName
         }
     }
 }
