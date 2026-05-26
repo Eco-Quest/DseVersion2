@@ -1,0 +1,24 @@
+{
+    "fileFormatVersion": "1.0.0",
+    "itemInfoEntries": {
+        "036774D8-D3B5-4A72-9A2E-4B9B0371611D": {
+            "author": "com.apple.CoreML",
+            "description": "CoreML Model Specification",
+            "name": "Face Emotion Classifier.mlmodel",
+            "path": "com.apple.CoreML/Face Emotion Classifier.mlmodel"
+        },
+        "46E3A238-D5DE-40F5-9D8C-14B7F0A9D45E": {
+            "author": "com.apple.CoreML",
+            "description": "External Metadata Overlay",
+            "name": "Metadata.json",
+            "path": "com.apple.CoreML/Metadata.json"
+        },
+        "7DD2FFD5-2C5E-445B-A5FF-37ADEEE292D7": {
+            "author": "com.apple.CoreML",
+            "description": "External FeatureDescription Overlay",
+            "name": "FeatureDescriptions.json",
+            "path": "com.apple.CoreML/FeatureDescriptions.json"
+        }
+    },
+    "rootModelIdentifier": "036774D8-D3B5-4A72-9A2E-4B9B0371611D"
+}

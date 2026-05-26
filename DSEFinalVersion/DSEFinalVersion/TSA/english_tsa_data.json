@@ -1,0 +1,63 @@
+{
+  "小三": {
+    "read_aloud": {
+      "id": "p3_ra_001",
+      "title": "Summer Holidays",
+      "passage": "I love my summer holidays very much. I go swimming with my brother. We also go to the library together. My parents want to take us to Japan this year. I can try some yummy food there!",
+      "questions": [
+        "Do you love your summer holidays?",
+        "What do you do with your brother?",
+        "Where do you go together?",
+        "Where do your parents want to take you?",
+        "What can you try in Japan?"
+      ]
+    },
+    "picture_answer": {
+      "id": "p3_pa_001",
+      "title": "Students at Recess",
+      "image": "recess_students",
+      "imageDescription": "Some students are playing and talking during recess time.",
+      "questions": [
+        "What are the students doing?",
+        "How do they feel?",
+        "What do you like to do at recess?",
+        "Who do you play with at school?",
+        "Do you enjoy recess time? Why?"
+      ]
+    }
+  },
+  "小六": {
+    "reading_interaction": {
+      "id": "p6_ri_001",
+      "title": "Outdoor Learning Day",
+      "passage": "Last Friday, our school held an Outdoor Learning Day. The weather was warm and sunny. We spent the day on a farm. In the morning, we helped the farmer plant some seeds and water the vegetables. In the afternoon, we made bread and fruit salad. It was a tiring but fun day! We learnt that food does not come easily. We must treasure food.",
+      "interaction_questions": [
+        "What did the school hold last Friday?",
+        "How was the weather?",
+        "Where did they spend the day?",
+        "What did they do in the morning?",
+        "What did they do in the afternoon?",
+        "Was it a tiring or easy day?",
+        "What did they learn from this experience?",
+        "Why must we treasure food?",
+        "Do you think Outdoor Learning Day is a good idea? Why?",
+        "What outdoor activity would you like to try?"
+      ]
+    },
+    "presentation": {
+      "id": "p6_pr_001",
+      "title": "Walking Along a Busy Road",
+      "instruction": "You are going to talk about walking along a busy road. Use the information below or your own ideas to do the presentation. You will have two minutes to complete the task.\n\nRemember:\n• Do not write on this Instruction Card.\n• Look at the teacher when you do the presentation.",
+      "helping_questions": [
+        "Where do you see busy roads in Hong Kong?",
+        "What kinds of transport are there on a busy road?",
+        "What transport do you usually take? Why?",
+        "Who do you see on a busy road?",
+        "What shops do you see there?",
+        "What shops do you usually go to? Why?",
+        "How do you cross the road safely?",
+        "Do you like walking along a busy road? Why / Why not?"
+      ]
+    }
+  }
+}
