@@ -360,4 +360,42 @@ final class ReportService1{
         
         return (system: systemPrompt, user: userPrompt)
     }
+    
+    // 優化講稿
+    func optimizeSpeech(
+        sentence: String,
+        promptText: String,
+        tags: Set<String>,
+        model: String = "qwen-plus",
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        let prompt = buildOptimizePrompt(sentence: sentence, promptText: promptText, tags: tags)
+        generateReport(prompt: prompt, model: model, completion: completion)
+    }
+    
+    private func buildOptimizePrompt(sentence: String, promptText: String, tags: Set<String>) -> PromptPair {
+        let systemPrompt = """
+        You are an expert English tutor helping a student improve their spoken English for the HKDSE English speaking exam.
+        Your task is to optimize the student's spoken response based on their specific requests and selected tags.
+        
+        Guidelines:
+        1. Maintain the core meaning and original intent of the student's response, including their conversational function (e.g., responding to others, agreeing, disagreeing, or building upon previous points).
+        2. Keep the length roughly similar to the original text, UNLESS the user explicitly requests to expand the content.
+        3. Improve vocabulary, grammar, and sentence structures to sound more natural, fluent, and appropriate for an exam setting.
+        4. Ensure the tone remains conversational and suitable for a group discussion.
+        
+        Provide ONLY the optimized sentence in English. Do not include any explanations, greetings, or markdown formatting.
+        """
+        
+        let tagsString = tags.isEmpty ? "None" : tags.joined(separator: ", ")
+        let userPrompt = """
+        Original Sentence: "\(sentence)"
+        Custom Request: \(promptText.isEmpty ? "None" : promptText)
+        Selected Optimization Tags: \(tagsString)
+        
+        Please provide the optimized version of the original sentence following the guidelines.
+        """
+        
+        return (system: systemPrompt, user: userPrompt)
+    }
 }

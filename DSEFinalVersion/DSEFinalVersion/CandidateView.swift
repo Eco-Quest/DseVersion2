@@ -206,7 +206,9 @@ struct AISubtitleView: View {
         } else {
             LazyVStack(spacing: 12) {
                 ForEach(webSocketManager.chatMessages) { message in
-                    AIChatBubble(message: message)
+                    AIChatBubble(message: message) { languageKey in
+                        webSocketManager.translateMessage(id: message.id, languageKey: languageKey)
+                    }
                 }
                 
                 if !webSocketManager.currentStreamingText.isEmpty && webSocketManager.isAITalking {
@@ -461,6 +463,7 @@ struct NoteView: View {
 struct AIChatBubble: View {
     let message: ChatMessage
     var isStreaming: Bool = false
+    var onTranslate: ((String) -> Void)? 
     
     // 根据说话者名称获取对应的图标名称
     private func getIconName(for speakerName: String?) -> String {
@@ -489,7 +492,7 @@ struct AIChatBubble: View {
                     // 使用自定义图标而不是系统图标
                     if message.role == .user {
                         Image(systemName: "person.circle.fill")
-                            .foregroundColor(Color(hex: "5C43A8"))
+                            .foregroundColor(Color(hex:"5C43A8"))
                             .font(.caption)
                     } else {
                         // 根据说话者显示对应的头像
@@ -514,24 +517,66 @@ struct AIChatBubble: View {
                         .foregroundColor(.gray)
                 }
                 
-                Text(message.content)
-                    .font(.body)
-                    .padding(12)
-                    .background(
-                        message.role == .user ?
-                        Color(hex: "5C43A8").opacity(0.15) :
-                            Color("baiseanniucolor")
-                    )
-                    .cornerRadius(16)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(message.content)
+                        .font(.body)
+                        .padding(12)
+                    
+                    if let langKey = message.currentLanguageKey,
+                       let translatedText = message.translations[langKey] {
+                        Divider()
+                            .padding(.horizontal, 12)
+                        
+                        Text(translatedText)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .padding(12)
+                    }
+                }
+                .background(
+                    message.role == .user ?
+                    Color(hex:"5C43A8").opacity(0.15) :
+                        Color("baiseanniucolor")
+                )
+                .cornerRadius(16)
+                
+                // 翻譯按鈕
+                HStack {
+                    if message.role == .ai {
+                        Spacer()
+                    }
+                    
+                    Menu {
+                        Button("🇭🇰 繁體中文") {
+                            onTranslate?("cht")
+                        }
+                        Button("🇨🇳 简体中文") {
+                            onTranslate?("zh")
+                        }
+                    } label: {
+                        Image(systemName: "translate")
+                            .font(.body)
+                            .foregroundColor(.gray)
+                            .padding(8)
+                            .background(Color.gray.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .padding(.horizontal, 8)
+                    
+                    if message.role == .user {
+                        Spacer()
+                    }
+                }
+                .padding(.top, 2)
                 
                 if isStreaming && message.role == .ai {
                     HStack {
                         Text("Speaking...")
                             .font(.caption2)
-                            .foregroundColor(Color(hex: "5C43A8").opacity(0.85))
+                            .foregroundColor(Color(hex:"5C43A8").opacity(0.85))
                         Image(systemName: "speaker.wave.2")
                             .font(.caption2)
-                            .foregroundColor(Color(hex: "5C43A8").opacity(0.85))
+                            .foregroundColor(Color(hex:"5C43A8").opacity(0.85))
                     }
                 }
             }
@@ -554,6 +599,8 @@ struct ChatMessage: Identifiable, Equatable {
     let timestamp: Date
     let voice: String?
     let speakerName: String?
+    var currentLanguageKey: String? 
+    var translations: [String: String] = [:]
     
     enum MessageRole {
         case user
@@ -828,16 +875,15 @@ struct SoundChartView: View {
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 5) {
-                let barCount = max(Int(geometry.size.width / 12), 6)
+                let barCount: Int = max(Int(geometry.size.width / 12), 6)
                 
-                // ✅ 修复：ForEach 正确遍历 0..<barCount
-                ForEach(0..<barCount, id: \.self) { index in
-                    let height = isUserSpeaking ? getBarHeight(index: index, total: barCount) : 6
+                ForEach(0..<barCount, id: \.self) { (index: Int) in
+                    let height: CGFloat = isUserSpeaking ? getBarHeight(index: index, total: barCount) : 6.0
                     
                     RoundedRectangle(cornerRadius: 2)
                         .fill(
                             LinearGradient(
-                                gradient: SwiftUI.Gradient(colors: [Color(hex: "#63BEF3"), Color(hex: "#5C43A9")]),
+                                gradient: SwiftUI.Gradient(colors: [Color(red: 99/255, green: 190/255, blue: 243/255), Color(red: 92/255, green: 67/255, blue: 169/255)]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -1297,42 +1343,54 @@ struct Participant {
     let proficiencyLevel: ProficiencyLevel
     
     enum ProficiencyLevel: String {
-        case beginner = "beginner, non-native english speaker (simple and repeated vocabulary, basic sentences, slow speaking pace)"
-        case intermediate = "intermediate (common vocabulary, can express opinions, slow speaking pace)"
-        case advanced = "advanced (fluent, sophisticated vocabulary, complex arguments)"
-        case native = "native (natural and conversational, impressive range of vocabulary and expressions, able to manage the disucssion)"
+        case dseLevel1 = "DSE Level 1 (very basic English, short simple sentences, frequent hesitation)"
+        case dseLevel2 = "DSE Level 2 (basic English, simple opinions, limited vocabulary and fluency)"
+        case dseLevel3 = "DSE Level 3 (clear English, can explain opinions with some structure)"
+        case dseLevel4 = "DSE Level 4 (fluent English, richer vocabulary, clear and developed arguments)"
+        case dseLevel5 = "DSE Level 5 (natural and precise English, strong logic, able to manage the discussion)"
         
         var style: String {
             switch self {
-            case .beginner:
+            case .dseLevel1:
                 return """
                     - Vocabulary: Use basic vocabulary.
                     - Grammar: Use simple and short sentences with mistakes that affect understanding.
                     - Flow: Have hesitations and mistakes or use simple fillers often. Speaking lack of organization and clarity.
+                    - Length: Keep responses very short (around 15-20 seconds when spoken).
                 """
-            case .intermediate:
+            case .dseLevel2:
                 return """
                     - Vocabulary: Use common but limited vocabulary.
                     - Grammar: Use basic connectors like 'because', 'although', 'so' with often mistakes.
                     - Flow: Have hesitations on expressing opinions but avoid overly complex language and sentence patterns.
+                    - Length: Keep responses short (around 20-25 seconds when spoken).
                 """
-            case .advanced:
+            case .dseLevel3:
+                return """
+                    - Vocabulary: Use clear everyday vocabulary with some topic-specific words.
+                    - Grammar: Use mostly correct sentence structures with occasional mistakes.
+                    - Logic: Express opinions clearly and give simple reasons or examples.
+                    - Length: Keep responses moderate (around 25-30 seconds when spoken).
+                """
+            case .dseLevel4:
                 return """
                     - Vocabulary: Use precise adjectives and complex expressions.
                     - Grammar: Use complex structures (relative clauses, conditionals).
                     - Logic: Able to express opinions clearly. Synthesize others' points before adding your own.
+                    - Length: Keep responses detailed (around 30-35 seconds when spoken).
                 """
-            case .native:
+            case .dseLevel5:
                 return """
                     - Vocabulary: Use impressive range of vocabulary and phrasal verbs naturally.
                     - Grammar: Flawless and varied sentence structures.
                     - Flow: Highly persuasive, uses rhetorical questions and nuanced tone.
+                    - Length: Keep responses comprehensive (around 35-45 seconds when spoken).
                 """
             }
         }
     }
     
-    init(name: String, voice: Voice, personality: String, proficiency: ProficiencyLevel = .intermediate) {
+    init(name: String, voice: Voice, personality: String, proficiency: ProficiencyLevel = .dseLevel3) {
         self.name = name
         self.voice = voice
         self.personality = personality
@@ -1354,6 +1412,8 @@ struct DiscussionTopic {
         Your personality: \(participant.personality)
         Your voice: \(participant.voice.displayName)
         Your English proficiency: \(participant.proficiencyLevel.rawValue)
+        Speaking Style Guidelines:
+        \(participant.proficiencyLevel.style)
         
         --- COMPLETE EXAM MATERIAL ---
         \(fullText)
@@ -1365,7 +1425,6 @@ struct DiscussionTopic {
         - Speak naturally, like a real classmate
         - Respond to what others say before adding your own views
         - Share your opinions using examples from the material
-        - Keep responses concise (20-30 seconds when spoken)
         - Adjust your language complexity according to your proficiency level
         - IMPORTANT: You are a DISTINCT individual. Do not say "thank you" on behalf of others.
         
@@ -1490,6 +1549,27 @@ class WebSocketManager: NSObject, ObservableObject {
     @Published var partBQuestion: String?
     @Published var partBUserResponses: [String] = []
     
+    func translateMessage(id: UUID, languageKey: String) {
+        guard let index = chatMessages.firstIndex(where: { $0.id == id }) else { return }
+        
+        chatMessages[index].currentLanguageKey = languageKey
+        
+        if chatMessages[index].translations[languageKey] != nil {
+            return
+        }
+        
+        let messageContent = chatMessages[index].content
+        
+        BaiduTranslation.shared.translateSentence(sentence: messageContent, languageKey: languageKey) { [weak self] translatedText in
+            guard let self = self, let translatedText = translatedText else { return }
+            DispatchQueue.main.async {
+                if let updateIndex = self.chatMessages.firstIndex(where: { $0.id == id }) {
+                    self.chatMessages[updateIndex].translations[languageKey] = translatedText
+                }
+            }
+        }
+    }
+    
     // Initial DSE collector wiring for handoff.
     private(set) var dseDataCollector = DSEDataCollector()
     private let volumeAnalyzer = VolumeAnalyzer()
@@ -1592,17 +1672,34 @@ class WebSocketManager: NSObject, ObservableObject {
             return
         }
         
-        do {
-            instructionPlayer = try AVAudioPlayer(contentsOf: url)
-            instructionPlayer?.delegate = self
-            instructionPlayer?.prepareToPlay()
-            instructionPlayer?.play()
-            print("Teacher voice playing...")
-        } catch {
-            print("Failed to play teacher voice: \(error)")
-            isAutoStarting = false
-            pendingInstructionPhase = nil
-            completion()
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let player = try AVAudioPlayer(contentsOf: url)
+                player.prepareToPlay()
+                
+                // 在背景執行緒直接執行 play()，徹底避免阻塞主執行緒
+                let didPlay = player.play()
+                
+                DispatchQueue.main.async {
+                    self.instructionPlayer = player
+                    self.instructionPlayer?.delegate = self
+                    if didPlay {
+                        print("Teacher voice playing...")
+                    } else {
+                        print("Teacher voice failed to start playing.")
+                        self.isAutoStarting = false
+                        self.pendingInstructionPhase = nil
+                        completion()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    print("Failed to play teacher voice: \(error)")
+                    self.isAutoStarting = false
+                    self.pendingInstructionPhase = nil
+                    completion()
+                }
+            }
         }
     }
     
@@ -1681,17 +1778,27 @@ class WebSocketManager: NSObject, ObservableObject {
             return
         }
         
-        do {
-            instructionPlayer = try AVAudioPlayer(contentsOf: url)
-            instructionPlayer?.delegate = self
-            instructionPlayer?.prepareToPlay()
-            if instructionPlayer?.play() != true {
-                pendingInstructionPhase = nil
-                beginDiscussionAfterInstruction()
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let player = try AVAudioPlayer(contentsOf: url)
+                player.prepareToPlay()
+                
+                let didPlay = player.play()
+                
+                DispatchQueue.main.async {
+                    self.instructionPlayer = player
+                    self.instructionPlayer?.delegate = self
+                    if !didPlay {
+                        self.pendingInstructionPhase = nil
+                        self.beginDiscussionAfterInstruction()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.pendingInstructionPhase = nil
+                    self.beginDiscussionAfterInstruction()
+                }
             }
-        } catch {
-            pendingInstructionPhase = nil
-            beginDiscussionAfterInstruction()
         }
     }
     
@@ -1744,7 +1851,7 @@ class WebSocketManager: NSObject, ObservableObject {
     
     private func getNextParticipant() -> Participant {
         guard !participants.isEmpty else {
-            return Participant(name: "Candidate A", voice: .jennifer, personality: "thoughtful", proficiency: .advanced)
+            return Participant(name: "Candidate A", voice: .jennifer, personality: "thoughtful", proficiency: .dseLevel3)
         }
         let participant = participants[currentParticipantIndex % participants.count]
         currentParticipantIndex += 1
@@ -1764,9 +1871,9 @@ class WebSocketManager: NSObject, ObservableObject {
     
     func setTopicWithDefaultParticipants(_ fullText: String) {
         let defaultParticipants = [
-            Participant(name: "Candidate A", voice: .cherry, personality: "thoughtful and analytical", proficiency: .advanced),
-            Participant(name: "Candidate B", voice: .kai, personality: "energetic and opinionated", proficiency: .advanced),
-            Participant(name: "Candidate C", voice: .jennifer, personality: "empathetic and community-focused", proficiency: .advanced)
+            Participant(name: "Candidate A", voice: .cherry, personality: "thoughtful and analytical", proficiency: .dseLevel3),
+            Participant(name: "Candidate B", voice: .kai, personality: "energetic and opinionated", proficiency: .dseLevel3),
+            Participant(name: "Candidate C", voice: .jennifer, personality: "empathetic and community-focused", proficiency: .dseLevel3)
         ]
         setTopic(fullText, participants: defaultParticipants)
     }
@@ -1869,32 +1976,46 @@ class WebSocketManager: NSObject, ObservableObject {
 
         
         Based on this material, you are having a group discussion.
-        
-        CONVERSATION SO FAR:
         """
         
-        if !conversationHistory.isEmpty {
-            instructions += "\n\(conversationHistory.suffix(6).joined(separator: "\n"))"
-        } else {
+        if conversationHistory.isEmpty {
             let firstTaskText = extractedTasks.first ?? "Identify the first meaningful discussion point from the exam material."
-            instructions += "\n(No previous conversation - you are starting the discussion)"
             instructions += """
+            
+            [CRITICAL: FIRST SPEAKER INSTRUCTION]
             You are the FIRST speaker to start the discussion:
             - Start without self-introduction.
             - Explicitly describe the main topic and tasks we need to discuss today.
             - Mention to discuss the current focus task first: Task 1 - \(firstTaskText)
             - Immediately share your initial thought on Task 1 - \(firstTaskText).
-            - End by inviting others to share their views on Task 1 - \(firstTaskText).
+            - End by inviting others to share their views.
             """
         }
         
-        // 在 buildDynamicInstructions 的 instructions 末尾添加
         instructions += """
-        CRITICAL RULE: 
-        - You are IN THE MIDDLE of an ongoing, continuous discussion. 
-        - NEVER use greetings like "Hello", "Hello again", "Hi", or "Good morning/afternoon" at the beginning of your turn. This is extremely unnatural in a flowing conversation.
-        - ALWAYS start by directly acknowledging the previous speaker's point (e.g., "I agree with...", "That's a good point, but...") or stating your point immediately.
+        
+        YOUR BEHAVIOR AS \(participant.name.uppercased()):
+        
+        1. Be a NATURAL discussion partner:
+           - Start and respond directly with content.
+           - Respond to what others have said before adding your own views.
+           - Use varied openings and closings.
+           
+        2. When speaking:
+           - Acknowledge the other participant's point and avoid repeating it.
+           - Share YOUR perspective based on your personality.
+           - You may use examples from the exam material to support your point.
+           - You MUST add at least one original idea, inference, or suggestion beyond the material content.
+        
+        3. Language level: \(participant.proficiencyLevel.rawValue)
+           - Adjust your vocabulary and sentence complexity accordingly
+           - Speaking Style Guidelines: \(participant.proficiencyLevel.style)
+
+        4. Use clear conversational English.
+        
+        Remember: You are having a real discussion, not giving a speech. Do not repeat the same phrases or task descriptions every turn.
         """
+        
         return instructions
     }
     
@@ -1954,28 +2075,33 @@ class WebSocketManager: NSObject, ObservableObject {
         currentVoiceDisplay = participant.voice.displayName
         currentResponseVoice = participant.voice
         
+        var previousAISpeakerName = "another candidate"
+        if let lastAIMessage = chatMessages.last(where: { $0.role == .ai }) {
+            previousAISpeakerName = lastAIMessage.speakerName ?? "another candidate"
+        }
+        
         var prompt = ""
         
         if let response = userResponse, !response.isEmpty {
             prompt = """
-            You are \(participant.name) (proficiency: \(participant.proficiencyLevel.rawValue)).
-            Keep language consistent with your assigned proficiency level.
             Remaining time: \(remainingTime) seconds.
             If remaining time is about 50 seconds or less, your MUST help the group reach consensus and give a closing summary to conclude the discussion.
 
-            The other participant just said: "\(response)"
+            The candidate (User) just responded to \(previousAISpeakerName) by saying: "\(response)"
+            [CRITICAL ROLEPLAY INSTRUCTION]: You are \(participant.name), NOT \(previousAISpeakerName). You should join the conversation as \(participant.name), acknowledge their point, and add your own thoughts.
+
             Current focus task: Task \(focusTaskNumber) - \(focusTaskText)
             Task transition status: \(didTransitionTask ? "You have just moved to a new task. Explicitly say you are moving to Task \(focusTaskNumber)." : "Stay focused on task \(focusTaskNumber).")
             Task flow rule: \(taskFlowInstruction)
             
-            1. Respond to the previous reply.
-            2. State the current focus task (\(focusTaskText)) before your response.
-            3. Focus on Task \(focusTaskNumber) - (\(focusTaskText)) and add one NEW perspective/reason/example beyond the material.
+            1. Acknowledge or respond to the User's reply from your perspective as \(participant.name).
+            2. Keep the discussion focused on Task \(focusTaskNumber) - (\(focusTaskText)), but do NOT awkwardly repeat the task description.
+            3. Add one NEW perspective/reason/example beyond the material.
+
+            Remember: You are already in the conversation, just start the reponse by agree or disagree.
             """
         } else {
             prompt = """
-            You are \(participant.name) (proficiency: \(participant.proficiencyLevel.rawValue)).
-            Keep language consistent with your assigned proficiency level.
             Remaining time: \(remainingTime) seconds.
             If remaining time is about 50 seconds or less, your MUST help the group reach consensus and give a closing summary to conclude the discussion.
 
@@ -1983,13 +2109,16 @@ class WebSocketManager: NSObject, ObservableObject {
             Task transition status: \(didTransitionTask ? "You have just moved to a new task. Explicitly say you are moving to Task \(focusTaskNumber)." :
             "Stay focused on task \(focusTaskNumber).")
             Task flow rule: \(taskFlowInstruction)
-            Previous candidate response: "\(lastAIResponse ?? "")"
-
-            The group is silent. It is your turn to keep the discussion moving.
-            1. Briefly respond to the previous candidate after agree or disagree.
-            2. State the current focus task (\(focusTaskText)) after your response.
-            3. Focus on Task \(focusTaskNumber) - (\(focusTaskText)) and add a NEW perspective/reason/example beyond the material.
             
+            The previous speaker was \(previousAISpeakerName), who said: "\(lastAIResponse ?? "")"
+            
+            [CRITICAL ROLEPLAY INSTRUCTION]: You are \(participant.name), NOT \(previousAISpeakerName).
+            
+            1. Briefly respond to \(previousAISpeakerName) by agree or disagree.
+            2. Keep the discussion focused on Task \(focusTaskNumber) - (\(focusTaskText)), but do NOT awkwardly repeat the task description.
+            3. Add a NEW perspective/reason/example beyond the material.
+
+            Remember: You are already in the conversation, just start the reponse by agree or disagree.
             """
         }
         
@@ -2028,17 +2157,26 @@ class WebSocketManager: NSObject, ObservableObject {
             return
         }
         
-        do {
-            instructionPlayer = try AVAudioPlayer(contentsOf: playableURL)
-            instructionPlayer?.delegate = self
-            instructionPlayer?.prepareToPlay()
-            if instructionPlayer?.play() != true {
-                pendingInstructionPhase = nil
-                beginPartBAfterInstruction()
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let player = try AVAudioPlayer(contentsOf: playableURL)
+                player.prepareToPlay()
+                let didPlay = player.play()
+                
+                DispatchQueue.main.async {
+                    self.instructionPlayer = player
+                    self.instructionPlayer?.delegate = self
+                    if !didPlay {
+                        self.pendingInstructionPhase = nil
+                        self.beginPartBAfterInstruction()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.pendingInstructionPhase = nil
+                    self.beginPartBAfterInstruction()
+                }
             }
-        } catch {
-            pendingInstructionPhase = nil
-            beginPartBAfterInstruction()
         }
     }
     
@@ -2215,15 +2353,24 @@ class WebSocketManager: NSObject, ObservableObject {
             return
         }
         
-        do {
-            instructionPlayer = try AVAudioPlayer(contentsOf: url)
-            instructionPlayer?.delegate = self
-            instructionPlayer?.prepareToPlay()
-            if instructionPlayer?.play() != true {
-                completePartBExamFinalStep()
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                let player = try AVAudioPlayer(contentsOf: url)
+                player.prepareToPlay()
+                let didPlay = player.play()
+                
+                DispatchQueue.main.async {
+                    self.instructionPlayer = player
+                    self.instructionPlayer?.delegate = self
+                    if !didPlay {
+                        self.completePartBExamFinalStep()
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.completePartBExamFinalStep()
+                }
             }
-        } catch {
-            completePartBExamFinalStep()
         }
     }
     
@@ -2613,7 +2760,7 @@ class WebSocketManager: NSObject, ObservableObject {
             }
         } else {
             // 添加 AI 消息到 transcript
-            dseDataCollector.appendTranscriptSegment("\(speakerName ?? "Candidate"): \(content)")
+            dseDataCollector.appendTranscriptSegment("\(speakerName ?? "Candidate"): \(content)", isUser: false)
         }
     }
     
@@ -2752,15 +2899,15 @@ struct PreviewWaveformView: View {
     var body: some View {
         GeometryReader { geometry in
             HStack(spacing: 5) {
-                let barCount = max(Int(geometry.size.width / 12), 6)
+                let barCount: Int = max(Int(geometry.size.width / 12), 6)
                 
-                ForEach(0..<barCount, id: \.self) { index in
-                    let height = isAnimating ? getAnimatedBarHeight(index: index) : 6
+                ForEach(0..<barCount, id: \.self) { (index: Int) in
+                    let height: CGFloat = isAnimating ? getAnimatedBarHeight(index: index) : 6.0
                     
                     RoundedRectangle(cornerRadius: 2)
                         .fill(
                             LinearGradient(
-                                gradient: SwiftUI.Gradient(colors: [Color(hex: "#63BEF3"), Color(hex: "#5C43A9")]),
+                                gradient: SwiftUI.Gradient(colors: [Color(red: 99/255, green: 190/255, blue: 243/255), Color(red: 92/255, green: 67/255, blue: 169/255)]),
                                 startPoint: .top,
                                 endPoint: .bottom
                             )
@@ -2914,9 +3061,9 @@ struct VideoCallView: View {
     private var discussionParticipants: [Participant] {
         guard !dseCandidates.isEmpty else {
             return [
-                Participant(name: "Candidate A", voice: .cherry, personality: "thoughtful and analytical", proficiency: .advanced),
-                Participant(name: "Candidate B", voice: .kai, personality: "energetic and opinionated", proficiency: .advanced),
-                Participant(name: "Candidate C", voice: .jennifer, personality: "empathetic and community-focused", proficiency: .advanced)
+                Participant(name: "Candidate A", voice: .cherry, personality: "thoughtful and analytical", proficiency: .dseLevel3),
+                Participant(name: "Candidate B", voice: .kai, personality: "energetic and opinionated", proficiency: .dseLevel3),
+                Participant(name: "Candidate C", voice: .jennifer, personality: "empathetic and community-focused", proficiency: .dseLevel3)
             ]
         }
         
@@ -2936,13 +3083,15 @@ struct VideoCallView: View {
             let proficiency: Participant.ProficiencyLevel
             switch candidate.level {
             case ...1:
-                proficiency = .beginner
-            case 2...3:
-                proficiency = .intermediate
+                proficiency = .dseLevel1
+            case 2:
+                proficiency = .dseLevel2
+            case 3:
+                proficiency = .dseLevel3
             case 4:
-                proficiency = .advanced
+                proficiency = .dseLevel4
             default:
-                proficiency = .native
+                proficiency = .dseLevel5
             }
             
             return Participant(
@@ -3386,7 +3535,7 @@ struct VideoCallView: View {
                                                 endPoint: .bottom
                                             ) :
                                             LinearGradient(
-                                                colors: [Color(hex: "#667eea"), Color(hex: "#764ba2")],
+                                                colors: [Color("#667eea"), Color("#764ba2")],
                                                 startPoint: .top,
                                                 endPoint: .bottom
                                             )

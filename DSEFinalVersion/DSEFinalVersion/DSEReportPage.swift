@@ -9,6 +9,9 @@ struct ReviewChatMessage: Identifiable {
     let content: String
     let timestamp: Date
     let speakerName: String?
+    var currentLanguageKey: String?
+    var translations: [String: String] = [:]
+    var optimizedText: String?
     
     enum MessageRole {
         case user
@@ -33,6 +36,8 @@ struct ReviewChatMessage: Identifiable {
 // MARK: - 对话回顾聊天气泡（与 AIChatBubble 样式一致）
 struct ReviewChatBubble: View {
     let message: ReviewChatMessage
+    var onTranslate: ((String) -> Void)?
+    var onOptimize: (() -> Void)?
     
     private func getIconName(for speakerName: String?) -> String {
         guard let name = speakerName else { return "waveform.circle.fill" }
@@ -59,7 +64,7 @@ struct ReviewChatBubble: View {
                 HStack {
                     if message.role == .user {
                         Image(systemName: "person.circle.fill")
-                            .foregroundColor(Color(hex: "5C43A8"))
+                            .foregroundColor(Color(hex:"5C43A8"))
                             .font(.caption)
                     } else {
                         let iconName = getIconName(for: message.speakerName)
@@ -83,15 +88,95 @@ struct ReviewChatBubble: View {
                         .foregroundColor(.gray)
                 }
                 
-                Text(message.content)
-                    .font(.body)
-                    .padding(12)
-                    .background(
-                        message.role == .user ?
-                        Color(hex: "5C43A8").opacity(0.15) :
-                        Color("baiseanniucolor")
-                    )
-                    .cornerRadius(16)
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(message.content)
+                        .font(.body)
+                        .padding(12)
+                    
+                    if let langKey = message.currentLanguageKey,
+                       let translatedText = message.translations[langKey] {
+                        Divider()
+                            .padding(.horizontal, 12)
+                        
+                        Text(translatedText)
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .padding(12)
+                    }
+                    
+                    if let optimizedText = message.optimizedText {
+                        Divider()
+                            .padding(.horizontal, 12)
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "wand.and.stars")
+                                Text("AI 優化結果")
+                            }
+                            .font(.caption2)
+                            .foregroundColor(Color("ziselansecolor"))
+                            
+                            Text(optimizedText)
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(12)
+                    }
+                }
+                .background(
+                    message.role == .user ?
+                    Color(hex:"5C43A8").opacity(0.15) :
+                    Color("baiseanniucolor")
+                )
+                .cornerRadius(16)
+                
+                if message.role == .ai {
+                    HStack {
+                        Spacer()
+                        
+                        Menu {
+                            Button("🇭🇰 繁體中文") {
+                                onTranslate?("cht")
+                            }
+                            Button("🇨🇳 简体中文") {
+                                onTranslate?("zh")
+                            }
+                        } label: {
+                            Image(systemName: "translate")
+                                .font(.body)
+                                .foregroundColor(.gray)
+                                .padding(8)
+                                .background(Color.gray.opacity(0.1))
+                                .clipShape(Circle())
+                        }
+                        .padding(.horizontal, 8)
+                    }
+                    .padding(.top, 2)
+                } else if message.role == .user {
+                    HStack {
+                        Spacer()
+                        
+                        Button(action: {
+                            onOptimize?()
+                        }) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "wand.and.stars")
+                                    .font(.caption)
+                                Text("AI 優化")
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(Color("blackorwhitecolor"))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 8)
+                            .background(Color("ziselansecolor").opacity(0.1))
+                            .cornerRadius(16)
+                        }
+                        .padding(.horizontal, 8)
+                    }
+                    .padding(.top, 2)
+                }
             }
             
             if message.role == .ai {
@@ -106,18 +191,43 @@ struct ReviewChatBubble: View {
 // MARK: - 对话回顾视图（使用聊天气泡样式）
 // MARK: - 对话回顾视图（使用聊天气泡样式，直接接收 ChatMessage 数组）
 struct ConversationReviewView: View {
-    let chatMessages: [ChatMessage]  // 直接使用 ChatMessage 数组
+    @State private var messages: [ReviewChatMessage]
+    @State private var selectedMessageForOptimization: ReviewChatMessage?
     let preparationNote: String
     
-    // 将 ChatMessage 转换为 ReviewChatMessage
-    private var messages: [ReviewChatMessage] {
-        return chatMessages.map { message in
+    init(chatMessages: [ChatMessage], preparationNote: String) {
+        let reviewMessages = chatMessages.map { msg in
             ReviewChatMessage(
-                role: message.role == .user ? .user : .ai,
-                content: message.content,
-                timestamp: message.timestamp,
-                speakerName: message.speakerName
+                role: msg.role == .user ? .user : .ai,
+                content: msg.content,
+                timestamp: msg.timestamp,
+                speakerName: msg.speakerName,
+                currentLanguageKey: msg.currentLanguageKey,
+                translations: msg.translations
             )
+        }
+        self._messages = State(initialValue: reviewMessages)
+        self.preparationNote = preparationNote
+    }
+    
+    private func translateMessage(id: UUID, languageKey: String) {
+        guard let index = messages.firstIndex(where: { $0.id == id }) else { return }
+        
+        messages[index].currentLanguageKey = languageKey
+        
+        if messages[index].translations[languageKey] != nil {
+            return
+        }
+        
+        let messageContent = messages[index].content
+        
+        BaiduTranslation.shared.translateSentence(sentence: messageContent, languageKey: languageKey) { translatedText in
+            guard let translatedText = translatedText else { return }
+            DispatchQueue.main.async {
+                if let updateIndex = self.messages.firstIndex(where: { $0.id == id }) {
+                    self.messages[updateIndex].translations[languageKey] = translatedText
+                }
+            }
         }
     }
     
@@ -137,7 +247,15 @@ struct ConversationReviewView: View {
                     .padding(.top, 100)
                 } else {
                     ForEach(messages) { message in
-                        ReviewChatBubble(message: message)
+                        ReviewChatBubble(
+                            message: message,
+                            onTranslate: { languageKey in
+                                translateMessage(id: message.id, languageKey: languageKey)
+                            },
+                            onOptimize: {
+                                selectedMessageForOptimization = message
+                            }
+                        )
                     }
                 }
             }
@@ -145,6 +263,131 @@ struct ConversationReviewView: View {
             .padding(.horizontal, 12)
         }
         .background(Color("systemBackgroundColor"))
+        .sheet(item: $selectedMessageForOptimization) { message in
+            OptimizeSpeechSheetView(message: message) { optimizedText in
+                if let index = messages.firstIndex(where: { $0.id == message.id }) {
+                    messages[index].optimizedText = optimizedText
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 優化講稿BottomSheet
+struct OptimizeSpeechSheetView: View {
+    let message: ReviewChatMessage
+    var onOptimizeComplete: ((String) -> Void)?
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var promptText: String = ""
+    @State private var selectedTags: Set<String> = []
+    @State private var isOptimizing: Bool = false
+    
+    let availableTags = ["修改語法", "潤色用字", "擴寫內容", "提升語氣", "增加連接詞", "豐富論點"]
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Header
+            HStack {
+                Button(action: { dismiss() }) {
+                    Image(systemName: "xmark")
+                        .font(.title3)
+                        .foregroundColor(.primary)
+                }
+                Spacer()
+                Text("優化講稿")
+                    .font(.headline)
+                Spacer()
+                Image(systemName: "xmark")
+                    .font(.title3)
+                    .opacity(0)
+            }
+            .padding(.horizontal)
+            .padding(.top, 20)
+            
+            ScrollView {
+                VStack(spacing: 20) {
+                    TextField("輸入自訂優化要求...", text: $promptText, axis: .vertical)
+                        .lineLimit(3...6)
+                        .padding()
+                        .background(Color.gray.opacity(0.1))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                    
+                    // Shortcuts
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("快捷指令")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                            .padding(.horizontal)
+                        
+                        // Tags
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 10) {
+                                ForEach(availableTags, id: \.self) { tag in
+                                    Button(action: {
+                                        if selectedTags.contains(tag) {
+                                            selectedTags.remove(tag)
+                                        } else {
+                                            selectedTags.insert(tag)
+                                        }
+                                    }) {
+                                        Text(tag)
+                                            .font(.subheadline)
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 8)
+                                            .background(selectedTags.contains(tag) ? Color("ziselansecolor") : Color.gray.opacity(0.15))
+                                            .foregroundColor(selectedTags.contains(tag) ? .white : .primary)
+                                            .cornerRadius(20)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                    }
+                }
+            }
+            
+            // Optimize button
+            Button(action: {
+                isOptimizing = true
+                ReportService1.shared.optimizeSpeech(
+                    sentence: message.content,
+                    promptText: promptText,
+                    tags: selectedTags
+                ) { result in
+                    DispatchQueue.main.async {
+                        self.isOptimizing = false
+                        switch result {
+                        case .success(let optimizedText):
+                            self.onOptimizeComplete?(optimizedText)
+                            self.dismiss()
+                        case .failure(let error):
+                            print("優化失敗：\(error.localizedDescription)")
+                        }
+                    }
+                }
+            }) {
+                HStack {
+                    if isOptimizing {
+                        ProgressView()
+                            .tint(.white)
+                    } else {
+                        Text("優化講稿")
+                    }
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color("ziselansecolor"))
+                .cornerRadius(12)
+                .padding(.horizontal)
+            }
+            .disabled(isOptimizing)
+            .padding(.bottom, 20)
+        }
+        .presentationDetents([.fraction(0.45), .medium])
     }
 }
 
@@ -665,11 +908,11 @@ struct EyeContactPieChartView: View {
     }
     
     private let sliceColors: [String: Color] = [
-        "center": Color(hex: "5C43A9"),
-        "left": Color(hex: "3EA0C6"),
-        "right": Color(hex: "63BEF3"),
-        "lookAway": Color(hex: "FFCC41"),
-        "noFace": Color(hex: "445CB4")
+        "center": Color("5C43A9"),
+        "left": Color("3EA0C6"),
+        "right": Color("63BEF3"),
+        "lookAway": Color("FFCC41"),
+        "noFace": Color("445CB4")
     ]
     
     private let sliceNames: [String: String] = [
@@ -1690,7 +1933,7 @@ struct DSEReportPage: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 20, weight: .semibold))
-                        .foregroundColor(Color(hex:"63BEF3"))
+                        .foregroundColor(Color("63BEF3"))
                 }
                 .frame(width: 44, height: 44)
                 
@@ -1742,7 +1985,7 @@ struct DSEReportPage: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(selectedAnalysisTab == idx ? Color(hex:"5C43A9") : Color("baiseanniucolor"))
+                    .background(selectedAnalysisTab == idx ? Color(red: 92/255, green: 67/255, blue: 169/255) : Color("baiseanniucolor"))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -1771,7 +2014,7 @@ struct DSEReportPage: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(selectedVideoTab == idx ? Color(hex:"5C43A9") : Color("baiseanniucolor"))
+                    .background(selectedVideoTab == idx ? Color(red: 92/255, green: 67/255, blue: 169/255) : Color("baiseanniucolor"))
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -1887,10 +2130,9 @@ struct DSEReportPage: View {
                                 .font(.headline)
                             
                             let details = detailLines(for: selectedAnalysisTab)
-                            if details.indices.contains(0) { detailRow(text: details[0]) }
-                            if details.indices.contains(1) { detailRow(text: details[1]) }
-                            if details.indices.contains(2) { detailRow(text: details[2]) }
-                            if details.indices.contains(3) { detailRow(text: details[3]) }
+                            ForEach(details, id: \.title) { detail in
+                                detailRow(title: detail.title, text: detail.text)
+                            }
                         }
                         
                         Spacer().frame(height: 50)
@@ -1916,58 +2158,50 @@ struct DSEReportPage: View {
         .shadow(color: .black.opacity(0.05), radius: selectedSegment == 0 ? 0 : 8, x: 0, y: selectedSegment == 0 ? 0 : -2)
     }
     
-    private func detailRow(text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text("•")
+    private func detailRow(title: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
                 .font(.subheadline)
+                .fontWeight(.bold)
                 .foregroundColor(customPurple)
             
-            Text(text)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 8) {
+                Text("•")
+                    .font(.subheadline)
+                    .foregroundColor(customPurple)
+                
+                Text(text)
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 4)
     }
     
-    private func detailLines(for tab: Int) -> [String] {
+    private func detailLines(for tab: Int) -> [(title: String, text: String)] {
         guard let performance else {
-            return ["暫無數據"]
+            return [("No data","暫無數據")]
+        }
+        
+        func mapFeedback(_ feedback: DSECriterionLLMFeedback?) -> [(title: String, text: String)] {
+            return [
+                ("Justification", feedback?.justification ?? "justification"),
+                ("Strength", feedback?.strength ?? "strength"),
+                ("Weakness", feedback?.weakness ?? "weakness"),
+                ("Suggestion", feedback?.suggestion ?? "suggestion")
+            ]
         }
         
         switch tab {
         case 0:
-            let feedback = performance.feedback(for: .pronunciationDelivery)
-            return [
-                feedback?.justification ?? "justification",
-                feedback?.strength ?? "strength",
-                feedback?.weakness ?? "weakness",
-                feedback?.suggestion ?? "suggestion"
-            ]
+            return mapFeedback(performance.feedback(for: .pronunciationDelivery))
         case 1:
-            let feedback = performance.feedback(for: .communicationStrategies)
-            return [
-                feedback?.justification ?? "justification",
-                feedback?.strength ?? "strength",
-                feedback?.weakness ?? "weakness",
-                feedback?.suggestion ?? "suggestion"
-            ]
+            return mapFeedback(performance.feedback(for: .communicationStrategies))
         case 2:
-            let feedback = performance.feedback(for: .vocabularyLanguagePatterns)
-            return [
-                feedback?.justification ?? "justification",
-                feedback?.strength ?? "strength",
-                feedback?.weakness ?? "weakness",
-                feedback?.suggestion ?? "suggestion"
-            ]
+            return mapFeedback(performance.feedback(for: .vocabularyLanguagePatterns))
         default:
-            let feedback = performance.feedback(for: .ideasOrganization)
-            return [
-                feedback?.justification ?? "justification",
-                feedback?.strength ?? "strength",
-                feedback?.weakness ?? "weakness",
-                feedback?.suggestion ?? "suggestion"
-            ]
+            return mapFeedback(performance.feedback(for: .ideasOrganization))
         }
     }
 }

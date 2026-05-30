@@ -269,10 +269,10 @@ class DSEScoreCalculator {
         
         // 底分計算
         let baseScore: Double
-        if safeAvgPace >= 100 && safeAvgPace <= 150 {
-            baseScore = 50 + (50 - (abs(safeAvgPace - 125) / 25) * 50)
-        } else if safeAvgPace < 100 {
-            baseScore = (safeAvgPace / 100) * 50
+        if safeAvgPace >= 120 && safeAvgPace <= 150 {
+            baseScore = 50 + (50 - (abs(safeAvgPace - 135) / 25) * 50)
+        } else if safeAvgPace < 120 {
+            baseScore = (safeAvgPace / 120) * 50
         } else {
             baseScore = (150 / safeAvgPace) * 50
         }
@@ -367,16 +367,16 @@ class DSEScoreCalculator {
         let disgust = emotionPercentages["disgust"] ?? 0
         let sad = emotionPercentages["sad"] ?? 0
         
-        let positiveExpressive = min(joy + surprise, 30)
+        let positiveExpressive = joy + surprise
         let negative = angry + fear + disgust + sad
         
         let activeEmotions = emotionPercentages.values.filter { $0 > 5 }.count
-        let varietyBonus = activeEmotions >= 3 ? 10.0 : 0.0
+        let varietyBonus = activeEmotions >= 3 ? 5.0 : 0.0
         
-        let rawScore = (0.7 * calm)
-            + (0.2 * positiveExpressive)
-            + (0.1 * varietyBonus)
-            - (0.6 * negative)
+        let rawScore = (0.6 * calm)
+            + (0.4 * positiveExpressive)
+            + varietyBonus
+            - (0.4 * negative)
         
         return normalizedScore(rawScore)
     }

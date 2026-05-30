@@ -11,7 +11,7 @@ import SwiftUI
 struct DSEFinalVersionApp: App {
     var body: some Scene {
         WindowGroup {
-            ExamPracticeView()
+            DSESettingView()
         }
     }
 }

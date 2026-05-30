@@ -100,11 +100,12 @@ struct DSEScoringInput {
 final class DSEDataCollector {
     private static let defaultFillerWords: [String] = [
         "um", "uh", "er", "ah", "like", "you know", "i mean", "actually", "basically",
-        "well", "so","anyway","literally","whatever"
+        "well", "so","anyway","literally","whatever", "hmm"
     ]
     
     private(set) var speakingTurns: Int = 0
     private(set) var transcriptSegments: [String] = []
+    private(set) var userTranscriptSegments: [String] = []
     private(set) var volumeSamples: [DSEVolumeSample] = []
     private(set) var emotionCounts: [String: Int] = [:]
     private(set) var eyeContactCounts: [String: Int] = [:]
@@ -133,6 +134,7 @@ final class DSEDataCollector {
     func resetSessionData() {
         speakingTurns = 0
         transcriptSegments.removeAll()
+        userTranscriptSegments.removeAll()
         volumeSamples.removeAll()
         emotionCounts = resetEmotionCounts()
         eyeContactCounts = resetEyeContactCounts()
@@ -150,10 +152,13 @@ final class DSEDataCollector {
     }
     
     // (已使用)增加文字段落 - 在每一次成功transcript後呼叫 appendTranscriptSegment(content)
-    func appendTranscriptSegment(_ text: String) {
+    func appendTranscriptSegment(_ text: String, isUser: Bool = true) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         transcriptSegments.append(trimmed)
+        if isUser {
+            userTranscriptSegments.append(trimmed)
+        }
     }
     
     // (要用)增加聲量數據（dB）- 在每5秒呼叫一次 appendVolumeSample(45.3, 5)
@@ -233,17 +238,14 @@ final class DSEDataCollector {
             .map { DSEVolumeSample(timestamp: max(0, $0.timestamp), value: $0.value) }
         
         let transcript = transcriptSegments.joined(separator: "\n")
-        let transcriptWordCountFromText = transcript
-            .components(separatedBy: .whitespacesAndNewlines)
-            .filter { !$0.isEmpty }
-            .count
         
-        let transcriptWordCount = max(transcriptWordCountFromText, speakingTurnWordCounts.reduce(0, +))
+        let userWordCount = speakingTurnWordCounts.reduce(0, +)
         let effectiveDuration = speakingDurationSeconds > 0
             ? speakingDurationSeconds
             : (sessionStartAt.map { Date().timeIntervalSince($0) } ?? 0)
         let safeDuration = max(0, effectiveDuration)
-        let avg_pace = safeDuration > 0 ? (Double(transcriptWordCount) / safeDuration) * 60 : 0
+        let avg_pace = safeDuration > 0 ? (Double(userWordCount) / safeDuration) * 60 : 0
+        print("avg_pace: \(avg_pace), userWordCount: \(userWordCount), safeDuration: \(safeDuration)")
         
         let perTurnWPM = zip(speakingTurnWordCounts, speakingTurnDurations).map { words, seconds in
             guard seconds > 0 else { return 0.0 }
@@ -265,7 +267,9 @@ final class DSEDataCollector {
         let volumeValues = cleanedVolumeSamples.map(\.value)
         let avg_volume = calculateMean(volumeValues)
         let sd_volume = calculateStandardDeviation(volumeValues)
-        let fillerWordsMatch = detectFillerWords(in: transcript)
+        
+        let userTranscript = userTranscriptSegments.joined(separator: "\n")
+        let fillerWordsMatch = detectFillerWords(in: userTranscript)
         let filler_words_count = fillerWordsMatch.count
         let filler_words_used = fillerWordsMatch.words
         
@@ -276,7 +280,7 @@ final class DSEDataCollector {
             speakingTurns: max(0, speakingTurns),
             speakingTurnDetails: speakingTurnDetails,
             transcript: transcript,
-            transcriptWordCount: transcriptWordCount,
+            transcriptWordCount: userWordCount,
             speakingDurationSeconds: safeDuration,
             avg_pace: avg_pace,
             sd_pace: sd_pace,
@@ -325,9 +329,13 @@ final class DSEDataCollector {
     //(不用呼叫)已使用在buildInputForScoring()
     private func detectFillerWords(in transcript: String) -> (count: Int, words: [String]) {
         guard !fillerWords.isEmpty else { return (0, []) }
-        let lowerTranscript = transcript.lowercased()
+        
+        let punctuation = CharacterSet.punctuationCharacters
+        let cleanTranscript = transcript.components(separatedBy: punctuation).joined(separator: " ")
+        let lowerTranscript = cleanTranscript.lowercased()
+        
         var total = 0
-        var usedWords = Set<String>()
+        var allMatches = [String]()
         
         for filler in fillerWords {
             let escaped = NSRegularExpression.escapedPattern(for: filler)
@@ -335,12 +343,16 @@ final class DSEDataCollector {
             if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
                 let range = NSRange(lowerTranscript.startIndex..<lowerTranscript.endIndex, in: lowerTranscript)
                 let matches = regex.numberOfMatches(in: lowerTranscript, options: [], range: range)
-                if matches > 0 { usedWords.insert(filler) }
+                if matches > 0 { 
+                    for _ in 0..<matches {
+                        allMatches.append(filler)
+                    }
+                }
                 total += matches
             }
         }
         
-        return (total, usedWords.sorted())
+        return (total, allMatches.sorted())
     }
     
     private func resetEmotionCounts() -> [String: Int] {
