@@ -7,75 +7,11 @@
 
 import SwiftUI
 
-// MARK: - 英文 TSA 独立枚举（避免与中文冲突）
-
-// 年级
-enum TSAEnglishGrade: String, CaseIterable {
-    case p3 = "小学三年级"
-    case p6 = "小学六年级"
-    
-    var displayName: String { self.rawValue }
-    var jsonKey: String {
-        switch self {
-        case .p3: return "小三"
-        case .p6: return "小六"
-        }
-    }
-}
-
-// 小三题型
-enum TSAEnglishP3Type: String, CaseIterable {
-    case readAloud = "朗读与答问"
-    case pictureAnswer = "看图答问"
-    
-    var displayName: String { self.rawValue }
-    
-    var description: String {
-        switch self {
-        case .readAloud:
-            return "朗读一篇短文，然后回答问题"
-        case .pictureAnswer:
-            return "观察图片，描述图片内容并回答问题"
-        }
-    }
-    
-    var icon: String {
-        switch self {
-        case .readAloud: return "book.fill"
-        case .pictureAnswer: return "photo.stack.fill"
-        }
-    }
-}
-
-// 小六题型
-enum TSAEnglishP6Type: String, CaseIterable {
-    case readingInteraction = "朗读 + 师生互动"
-    case presentation = "口头报告"
-    
-    var displayName: String { self.rawValue }
-    
-    var description: String {
-        switch self {
-        case .readingInteraction:
-            return "朗读短文 + 师生互动问答"
-        case .presentation:
-            return "根据题目进行2分钟口头报告"
-        }
-    }
-    
-    var icon: String {
-        switch self {
-        case .readingInteraction: return "bubble.left.and.bubble.right.fill"
-        case .presentation: return "mic.fill"
-        }
-    }
-}
 
 // MARK: - 导航路径枚举
 enum EnglishNavigationDestination: Hashable {
     case englishPractice(grade: String, questionType: EnglishQuestionType)
 }
-
 
 // MARK: - 主视图
 struct TSAEnglishSettingView: View {
@@ -237,16 +173,7 @@ struct TSAEnglishSettingView: View {
             .navigationDestination(for: EnglishNavigationDestination.self) { destination in
                 switch destination {
                 case .englishPractice(let grade, let questionType):
-                    switch questionType {
-                    case .readAloud:
-                        TSAEnglishPracticeView(grade: grade, questionType: .readAloud)
-                    case .pictureAnswer:
-                        TSAEnglishPracticeView(grade: grade, questionType: .pictureAnswer)
-                    case .readingInteraction:
-                        TSAEnglishPracticeView(grade: grade, questionType: .readingInteraction)
-                    case .presentation:
-                        TSAEnglishPracticeView(grade: grade, questionType: .presentation)
-                    }
+                    TSAEnglishPracticeView(grade: grade, questionType: questionType)
                 }
             }
         }
@@ -255,16 +182,14 @@ struct TSAEnglishSettingView: View {
     // MARK: - 导航方法
     private func navigateToPracticeView() {
         if selectedGrade == .p3 {
-            let questionType: EnglishQuestionType = selectedP3Type == .readAloud ? .readAloud : .pictureAnswer
             navigationPath.append(EnglishNavigationDestination.englishPractice(
                 grade: "小三",
-                questionType: questionType
+                questionType: selectedP3Type.questionType
             ))
         } else {
-            let questionType: EnglishQuestionType = selectedP6Type == .readingInteraction ? .readingInteraction : .presentation
             navigationPath.append(EnglishNavigationDestination.englishPractice(
                 grade: "小六",
-                questionType: questionType
+                questionType: selectedP6Type.questionType
             ))
         }
     }
@@ -405,25 +330,26 @@ struct TSAEnglishSettingView: View {
         .transition(.opacity.combined(with: .move(edge: .top)))
     }
     
-    // MARK: - 说明文字
+    // MARK: - 说明文字（完整句子版本）
     private func getDescriptionText() -> String {
         if selectedGrade == .p3 {
             switch selectedP3Type {
             case .readAloud:
-                return "TSA英文口试（小三）- 朗读一篇短文，根据文章内容回答老师问题。（准备3分钟，作答1分钟）"
+                return "全港性评估（TSA）英文口试（小三）朗读与答问部分共设2分钟准备时间及3分钟作答时间。学生需清晰朗读指定文章，并根据文章内容回答老师提问，以完整句子表达。"
             case .pictureAnswer:
-                return "TSA英文口试（小三）- 仔细观察图片，描述你所看到的内容并回答提问。（准备3分钟，作答1分钟）"
+                return "全港性评估（TSA）英文口试（小三）看图答问部分共设3分钟准备时间及2分钟作答时间。学生需仔细观察图片，描述图片内容，并回答老师提问。"
             }
         } else {
             switch selectedP6Type {
             case .readingInteraction:
-                return "TSA英文口试（小六）- 朗读短文后师生互动，回答问题并表达个人观点。（准备3分钟，作答2分钟）"
+                return "全港性评估（TSA）英文口试（小六）朗读与师生互动部分共设2分钟准备时间及3分钟互动时间。学生需清晰朗读文章，并与老师进行实时互动问答，表达个人观点。"
             case .presentation:
-                return "TSA英文口试（小六）- 根据指定题目进行口头报告，清晰流畅表达观点。（准备3分钟，作答2分钟）"
+                return "全港性评估（TSA）英文口试（小六）口头报告部分共设3分钟准备时间及2分钟报告时间。学生需根据指定题目进行口头报告，清晰流畅地表达观点和想法。"
             }
         }
     }
 }
+
 
 // MARK: - 预览
 #Preview {

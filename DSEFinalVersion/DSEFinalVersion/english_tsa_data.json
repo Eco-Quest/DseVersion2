@@ -14,15 +14,42 @@
     },
     "picture_answer": {
       "id": "p3_pa_001",
-      "title": "Students at Recess",
-      "image": "recess_students",
-      "imageDescription": "Some students are playing and talking during recess time.",
+      "title": "On the Bus",
+      "image": "on_the_bus",
+      "instruction": "Here is a picture of people on a bus. Study the picture and answer the teacher's questions.",
       "questions": [
-        "What are the students doing?",
-        "How do they feel?",
-        "What do you like to do at recess?",
-        "Who do you play with at school?",
-        "Do you enjoy recess time? Why?"
+        {
+          "question": "What does the woman want to bring onto the bus?",
+          "pointTo": "the woman carrying a dog"
+        },
+        {
+          "question": "What does the driver say to the woman?",
+          "pointTo": "the driver"
+        },
+        {
+          "question": "Why is this girl so happy?",
+          "pointTo": "the girl listening to music on her mobile phone"
+        },
+        {
+          "question": "How does this man feel?",
+          "pointTo": "the man sitting next to the girl"
+        },
+        {
+          "question": "What is this boy doing?",
+          "pointTo": "the boy reading a book"
+        },
+        {
+          "question": "What is this girl doing?",
+          "pointTo": "the girl offering her seat to the old man"
+        },
+        {
+          "question": "Is it good to do that? Why / Why not?",
+          "pointTo": ""
+        },
+        {
+          "question": "What does this man say to the girl?",
+          "pointTo": "the old man"
+        }
       ]
     }
   },

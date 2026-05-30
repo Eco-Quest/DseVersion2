@@ -1849,13 +1849,14 @@ class DiscussionMicMonitor: ObservableObject {
 }
 
 // MARK: - 小组讨论专用视图
+// MARK: - 小组讨论专用视图
 struct DiscussionGroupView: View {
     let topic: String
     let language: String
     let onFinish: (String) -> Void
     
     @StateObject private var webSocketManager = DiscussionWebSocketManager()
-    @State private var remainingTime = 10
+    @State private var remainingTime = 180
     @State private var timer: Timer?
     @State private var isUserSpeaking = false
     @StateObject private var micMonitor = DiscussionMicMonitor()
@@ -1869,7 +1870,7 @@ struct DiscussionGroupView: View {
                     .font(.system(size: 28, weight: .bold))
                     .foregroundColor(Color("ziselansecolor"))
                 
-                Text("请与两位AI同学进行讨论（\(language)）")
+                Text("请与两位同学进行讨论（\(language)）")
                     .font(.system(size: 16))
                     .foregroundColor(.secondary)
                 
@@ -1943,9 +1944,9 @@ struct DiscussionGroupView: View {
             .frame(maxHeight: .infinity)
             .background(.clear)
             
-            // 底部录音控制
-            VStack(spacing: 8) {
-             
+            // 底部录音控制（修改部分）
+            VStack(spacing: 12) {
+                // 麦克风按钮
                 Button(action: {
                     if webSocketManager.isRecording {
                         webSocketManager.stopMicRecording()
@@ -1968,6 +1969,7 @@ struct DiscussionGroupView: View {
                 }
                 .disabled(!webSocketManager.canUserSpeak && !webSocketManager.isRecording)
                 
+                // 状态文字
                 if webSocketManager.isAITalking {
                     Text("\(webSocketManager.currentSpeakerName ?? "同学") 正在发言...")
                         .font(.caption2)
@@ -1985,6 +1987,31 @@ struct DiscussionGroupView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
+                
+                // 🔥 新增：提前结束发言按钮（只在正在讲话时显示）
+                if webSocketManager.isRecording {
+                    Button(action: {
+                        // 停止录音并强制结束讨论
+                        webSocketManager.stopMicRecording()
+                        isUserSpeaking = false
+                        
+                        // 获取讨论记录并结束
+                        let transcript = getDiscussionTranscript()
+                        webSocketManager.stopDiscussion()
+                        timer?.invalidate()
+                        timer = nil
+                        onFinish(transcript)
+                    }) {
+                        Text("提前结束发言")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 40)
+                            .background(Color.red.opacity(0.1))
+                            .cornerRadius(20)
+                    }
+                    .padding(.horizontal, 40)
+                }
             }
             .padding(.vertical, 12)
             .background(.clear)
@@ -1997,7 +2024,16 @@ struct DiscussionGroupView: View {
             stopDiscussion()
         }
         .navigationBarBackButtonHidden(true)
-      
+    }
+    
+    // 辅助方法：获取讨论记录
+    private func getDiscussionTranscript() -> String {
+        var transcript = ""
+        for message in webSocketManager.chatMessages {
+            let speaker = message.displayName
+            transcript += "\(speaker): \(message.content)\n"
+        }
+        return transcript
     }
     
     private func startDiscussion() {
@@ -2051,15 +2087,6 @@ struct DiscussionGroupView: View {
                 timer = nil
             }
         }
-    }
-    
-    private func getDiscussionTranscript() -> String {
-        var transcript = ""
-        for message in webSocketManager.chatMessages {
-            let speaker = message.displayName
-            transcript += "\(speaker): \(message.content)\n"
-        }
-        return transcript
     }
     
     private func timeString(from seconds: Int) -> String {
@@ -2253,9 +2280,7 @@ struct ReportContentView: View {
                 // 改进建议
                 suggestionsSection
                 
-                // 鼓励
-                encouragementSection
-                
+               
                 // 重新开始按钮
                 restartButton
             }
@@ -2348,7 +2373,7 @@ struct ReportContentView: View {
                     
                     // AI发言
                     VStack {
-                        Text("AI发言")
+                        Text("其他人的发言")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text("\(speakingStats.aiCount)")
@@ -2568,38 +2593,7 @@ struct ReportContentView: View {
         }
     }
     
-    @ViewBuilder
-    private var encouragementSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: "heart.fill")
-                    .foregroundColor(.pink)
-                    .font(.system(size: 16))
-                Text("鼓励")
-                    .font(.system(size: 18, weight: .bold))
-            }
-            .foregroundColor(.primary)
-            
-            if #available(iOS 26, *) {
-                Text(report.encouragement)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.pink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                    .padding()
-                    .glassEffect(.regular, in: .rect(cornerRadius: 12))
-            } else {
-                Text(report.encouragement)
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.pink)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .multilineTextAlignment(.leading)
-                    .padding()
-                    .background(Color("baiseanniucolor"))
-                    .cornerRadius(12)
-            }
-        }
-    }
+    
     
     @ViewBuilder
     private var restartButton: some View {
@@ -2858,7 +2852,7 @@ struct TSAChineseStoryView: View {
                     }
                 } else if currentStage == .speaking {
                     if storyConfig?.type == .pictureStory {
-                        Text("正在录音中...")
+                        Text("正在讲话中...")
                             .font(.system(size: 18))
                             .foregroundColor(.secondary)
                     } else if storyConfig?.type == .oralReport {
@@ -3076,6 +3070,8 @@ struct TSAChineseStoryView: View {
                         
                         Divider()
                         
+                        // 替换原来的 actionButton 部分（约在第 2080-2095 行附近）
+
                         if config.type == .discussion {
                             Button(action: {
                                 HapticFeedbackManager.medium()
@@ -3093,8 +3089,10 @@ struct TSAChineseStoryView: View {
                             }
                             .disabled(currentStage != .preparing)
                         } else {
-                            HStack {
-                                Text(!isRecording ? (currentStage == .preparing ? "跳过准备阶段" : "开始讲述...") : "正在录音中...")
+                            // 看图说故事 和 口头报告 使用这个按钮
+                            VStack(spacing: 16) {
+                                // 主按钮
+                                Text(!isRecording ? (currentStage == .preparing ? "跳过准备阶段" : "开始讲述...") : "正在讲话中...")
                                     .font(.system(size: 17, weight: .semibold))
                                     .foregroundColor(.white)
                                     .frame(maxWidth: .infinity)
@@ -3107,9 +3105,28 @@ struct TSAChineseStoryView: View {
                                             skipToSpeaking()
                                         }
                                     }
+                                
+                                // 🔥 新增：提前结束发言按钮（只在正在讲话时显示）
+                                if isRecording {
+                                    Button(action: {
+                                        HapticFeedbackManager.medium()
+                                        // 停止录音并结束
+                                        stopRecording()
+                                        stopRecordingToFile()
+                                        finishStory()
+                                    }) {
+                                        Text("提前结束发言")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundColor(.red)
+                                            .frame(maxWidth: .infinity)
+                                            .frame(height: 44)
+                                          
+                                    }
+                                }
                             }
                             .padding(.horizontal, 5)
                         }
+                        
                         
                         Spacer(minLength: 20)
                     }
